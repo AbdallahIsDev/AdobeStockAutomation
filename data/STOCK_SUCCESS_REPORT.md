@@ -1,5 +1,7 @@
 # STOCK SUCCESS REPORT
+
 ## How Top Contributors Dominate Adobe Stock & Other Platforms in 2026
+
 ### The Complete Strategy, Intelligence & Execution Guide
 
 ---
@@ -20,13 +22,15 @@ The top earners are not necessarily the best photographers or the most creative 
 
 Portfolio size is the single strongest predictor of monthly earnings. Research across contributor forums, YouTube income dashboards, and case studies reveals:
 
+
 | Monthly Earnings Range | Typical Portfolio Size | Acceptance Rate Maintained |
-|---|---|---|
-| $50–$200/month | 200–500 assets | >85% |
-| $200–$800/month | 500–2,000 assets | >88% |
-| $800–$3,000/month | 2,000–6,000 assets | >90% |
-| $3,000–$10,000/month | 6,000–15,000 assets | >92% |
-| $10,000+/month | 15,000+ assets | >93% |
+| ---------------------- | ---------------------- | -------------------------- |
+| $50–$200/month         | 200–500 assets         | >85%                       |
+| $200–$800/month        | 500–2,000 assets       | >88%                       |
+| $800–$3,000/month      | 2,000–6,000 assets     | >90%                       |
+| $3,000–$10,000/month   | 6,000–15,000 assets    | >92%                       |
+| $10,000+/month         | 15,000+ assets         | >93%                       |
+
 
 **Critical insight:** There is a non-linear earnings jump at the 2,000-asset threshold. Below this, the algorithm does not give the account meaningful exposure. Above it, the compounding effect of sales velocity begins to work in your favor. Every asset that sells pushes the account ranking higher, which increases impressions on ALL other assets, not just the selling one.
 
@@ -42,27 +46,31 @@ Top earners do not upload everything. They build **depth in 5–10 high-demand n
 
 **The highest-performing niches in 2026 (ranked by earnings per accepted image):**
 
-| Rank | Niche | Why It Converts |
-|---|---|---|
-| 1 | AI & Human Technology Interaction | Every tech company, media outlet, and B2B brand needs it daily |
-| 2 | Diverse Authentic People (no posed smiles) | Top demand for advertising, healthcare, education, HR |
-| 3 | Sustainable Tech & Green Energy | ESG mandates driving corporate visual content demand |
-| 4 | Mental Health & Emotional Wellness | Healthcare, therapy platforms, insurance, pharma |
-| 5 | Remote Work & Hybrid Office Culture | Remains evergreen post-2020 shift |
-| 6 | Fintech & Digital Finance Concepts | Banking, insurance, investment app advertising |
-| 7 | Healthcare Diversity & Inclusion | Hospitals, pharma, health insurance companies |
-| 8 | Data, Analytics & Business Intelligence | Enterprise software, consulting, SaaS platforms |
-| 9 | Climate Change Impact & Response | Media, NGOs, government campaigns |
-| 10 | Gen Z & Millennial Lifestyle Authenticity | Consumer brands, tech companies, social platforms |
+
+| Rank | Niche                                      | Why It Converts                                                |
+| ---- | ------------------------------------------ | -------------------------------------------------------------- |
+| 1    | AI & Human Technology Interaction          | Every tech company, media outlet, and B2B brand needs it daily |
+| 2    | Diverse Authentic People (no posed smiles) | Top demand for advertising, healthcare, education, HR          |
+| 3    | Sustainable Tech & Green Energy            | ESG mandates driving corporate visual content demand           |
+| 4    | Mental Health & Emotional Wellness         | Healthcare, therapy platforms, insurance, pharma               |
+| 5    | Remote Work & Hybrid Office Culture        | Remains evergreen post-2020 shift                              |
+| 6    | Fintech & Digital Finance Concepts         | Banking, insurance, investment app advertising                 |
+| 7    | Healthcare Diversity & Inclusion           | Hospitals, pharma, health insurance companies                  |
+| 8    | Data, Analytics & Business Intelligence    | Enterprise software, consulting, SaaS platforms                |
+| 9    | Climate Change Impact & Response           | Media, NGOs, government campaigns                              |
+| 10   | Gen Z & Millennial Lifestyle Authenticity  | Consumer brands, tech companies, social platforms              |
+
 
 ### 1.4 The Rejection Rate Obsession
 
 Top contributors maintain a rejection rate below 8%. Every rejection has three costs:
+
 1. **Direct cost** — the asset earns nothing
 2. **Algorithmic cost** — high rejection rates lower the contributor's overall quality score, reducing visibility of accepted assets
 3. **Time cost** — rejected images require re-editing or abandonment
 
 **Pre-submission rejection checklist (every image):**
+
 ```
 Technical:
 ☐ Resolution minimum 4 megapixels (ideally 12MP+)
@@ -88,6 +96,7 @@ Commercial:
 The most important reframe for any contributor: **the image gets you past rejection, the metadata gets you sales.** Top contributors routinely spend more time on titles and keywords than on image production. A technically average image with perfect metadata will outsell a beautiful image with poor metadata every time.
 
 The ratio top earners report spending:
+
 - **20% of time** on image creation/selection
 - **80% of time** on metadata, categorization, and trend research
 
@@ -103,16 +112,18 @@ Every image must be evaluated through the lens of a specific buyer. The question
 
 **Buyer archetypes who license stock images:**
 
-| Buyer Type | What They Need | Budget | Volume |
-|---|---|---|---|
-| Marketing Manager (B2B tech) | Professional, diverse teams, data/AI concepts | High | Very High |
-| Healthcare Communications | Inclusive patient/doctor scenes, wellness | High | High |
-| Editorial Designer (news/magazine) | Current events concepts, editorial portraits | Medium | High |
-| UX/Product Designer | Icons, concepts, minimal UI contexts | Low–Medium | Very High |
-| Small Business Owner | Versatile lifestyle, product mockups | Low | Very High |
-| Social Media Manager | Trend-aligned lifestyle, seasonal content | Low–Medium | High |
-| Government/NGO Communicator | Diversity, sustainability, public health | Medium | Medium |
-| Academic/Educational Publisher | Clear conceptual illustrations, diversity | Low | Medium |
+
+| Buyer Type                         | What They Need                                | Budget     | Volume    |
+| ---------------------------------- | --------------------------------------------- | ---------- | --------- |
+| Marketing Manager (B2B tech)       | Professional, diverse teams, data/AI concepts | High       | Very High |
+| Healthcare Communications          | Inclusive patient/doctor scenes, wellness     | High       | High      |
+| Editorial Designer (news/magazine) | Current events concepts, editorial portraits  | Medium     | High      |
+| UX/Product Designer                | Icons, concepts, minimal UI contexts          | Low–Medium | Very High |
+| Small Business Owner               | Versatile lifestyle, product mockups          | Low        | Very High |
+| Social Media Manager               | Trend-aligned lifestyle, seasonal content     | Low–Medium | High      |
+| Government/NGO Communicator        | Diversity, sustainability, public health      | Medium     | Medium    |
+| Academic/Educational Publisher     | Clear conceptual illustrations, diversity     | Low        | Medium    |
+
 
 ### 2.2 Traits of High-Value (Winning) Images
 
@@ -122,7 +133,7 @@ An image scores high commercial value when it has **all four** of the following:
 
 **2. Emotional resonance or problem-solving feel** — The image communicates something the buyer's audience FEELS, not just sees. "Confident professional" vs "person standing." "Hopeful patient" vs "person in hospital."
 
-**3. Current + evergreen balance** — The image reflects now (modern devices, contemporary fashion, current aesthetics) while avoiding hyper-trendy elements that will look dated in 12 months.
+**3. Current + evergreen balance** — The image reflects now (modern devices, contemporary fashion, current aesthetics).
 
 **4. Clean technical execution** — Sharp where it needs to be sharp, properly lit, well-composed, no distracting elements that force a buyer to ask a designer to retouch it.
 
@@ -159,6 +170,7 @@ STEP 6: Create for the gap, not for the already-saturated look
 ### 2.5 Early Sales Velocity Indicator
 
 When a new image is uploaded, monitor its first 30 days closely. Images that receive at least one license in the first 30 days have a dramatically higher lifetime earnings curve (due to the algorithm's velocity weighting). If an image has zero sales after 60 days, it likely has one of these problems:
+
 - Wrong or weak keywords (fix first)
 - Title not matching buyer search language (fix second)
 - Wrong category (fix third)
@@ -205,6 +217,7 @@ Adobe's algorithm treats every word in the title as a searchable token with high
 The image title becomes part of the image's URL on Adobe Stock. This means a well-written title gets indexed by Google Image Search, Bing, and other search engines — creating external organic traffic to the image beyond Adobe's own platform. This is a significant, often-overlooked traffic multiplier.
 
 **Title Formula:**
+
 ```
 [Primary Subject] + [Action/State] + [Setting/Context] + [Mood/Style]
 Max 70 characters. No punctuation except commas. No "stock photo of" prefix.
@@ -308,6 +321,7 @@ Method 5 — Cross-Platform Check
 Category is an underrated ranking signal. Adobe Stock uses category to refine search results when buyers browse by category rather than keyword search. Choosing the wrong category means missing an entire buyer discovery channel.
 
 **Category selection rules:**
+
 ```
 1. Always choose the most SPECIFIC category available (not the parent category)
 2. When in doubt between two equal categories, choose the one with less competition
@@ -343,14 +357,16 @@ Negative signals:
 
 While Adobe Stock is the primary platform for this system, understanding the differences helps optimize cross-platform strategy:
 
-| Factor | Adobe Stock | Shutterstock | Getty Images |
-|---|---|---|---|
-| Royalty rate | 33% standard, up to 38% Elite | 15–40% tiered | 20–45% tiered |
-| Algorithm | Metadata-first, activity-weighted | Similar but uses download velocity more | Curation-heavy, editorial strong |
-| Acceptance standards | Strict on quality, moderate on concept | Moderate quality, strict on nudity/violence | Very high curation bar |
-| Best for | AI/conceptual/lifestyle | High volume commercial | Premium editorial |
-| Keyword limit | 50 keywords | 50 keywords | 45 tags |
-| Fastest growth path | Consistent uploads + metadata quality | Volume with decent quality | Getting accepted = major visibility |
+
+| Factor               | Adobe Stock                            | Shutterstock                                | Getty Images                        |
+| -------------------- | -------------------------------------- | ------------------------------------------- | ----------------------------------- |
+| Royalty rate         | 33% standard, up to 38% Elite          | 15–40% tiered                               | 20–45% tiered                       |
+| Algorithm            | Metadata-first, activity-weighted      | Similar but uses download velocity more     | Curation-heavy, editorial strong    |
+| Acceptance standards | Strict on quality, moderate on concept | Moderate quality, strict on nudity/violence | Very high curation bar              |
+| Best for             | AI/conceptual/lifestyle                | High volume commercial                      | Premium editorial                   |
+| Keyword limit        | 50 keywords                            | 50 keywords                                 | 45 tags                             |
+| Fastest growth path  | Consistent uploads + metadata quality  | Volume with decent quality                  | Getting accepted = major visibility |
+
 
 ---
 
@@ -460,6 +476,7 @@ Slot 35: [Future-oriented concept — where this topic is heading]
 Adobe Stock requires explicit disclosure when images are created using generative AI tools. Failure to disclose correctly results in rejection and potential account penalties.
 
 **Disclosure rules:**
+
 ```
 ✓ Check "Created using generative AI tools" for ALL AI-generated images
 ✓ Even if you applied heavy post-processing, if the base image was AI-generated → disclose
@@ -502,14 +519,16 @@ When in doubt between Photos and Illustrations for an AI image:
 
 Seasonal content must be uploaded **90–120 days in advance** to benefit from Adobe's indexing and early buyer searches. Top contributors plan a year ahead.
 
-| Upload Window | Target Season/Event |
-|---|---|
-| September–October | Winter holidays, Christmas, Hanukkah, New Year |
-| November–December | Valentine's Day, Spring planning |
-| January–February | Easter, Spring, Earth Day, graduation |
-| March–April | Summer, Father's Day, Independence Day |
-| May–June | Back to school, autumn, Halloween planning |
-| July–August | Thanksgiving, Black Friday, end-of-year business |
+
+| Upload Window     | Target Season/Event                              |
+| ----------------- | ------------------------------------------------ |
+| September–October | Winter holidays, Christmas, Hanukkah, New Year   |
+| November–December | Valentine's Day, Spring planning                 |
+| January–February  | Easter, Spring, Earth Day, graduation            |
+| March–April       | Summer, Father's Day, Independence Day           |
+| May–June          | Back to school, autumn, Halloween planning       |
+| July–August       | Thanksgiving, Black Friday, end-of-year business |
+
 
 ### 5.2 The Evergreen-Trending Balance Strategy
 
@@ -547,6 +566,7 @@ Production benefits:
 ```
 
 **Recommended series structures:**
+
 - 1 wide 16:9 establishing shot + 1 close-up detail + 1 overhead/aerial + 1 portrait-orientation — covering all buyer crop needs
 - Same concept, 3 different demographic groups — covering inclusive buyer requirements
 - Same subject, 3 different moods (optimistic, focused, concerned) — covering editorial versatility
@@ -573,6 +593,7 @@ Editorial Use Only:
 ```
 
 **Maximize Extended License opportunities by creating:**
+
 - Clean vector-style conceptual images suitable for merchandise
 - Simple geometric or pattern-based backgrounds
 - Isolated subjects on clean white/transparent backgrounds (for product mockups)
@@ -837,20 +858,22 @@ Total: 0–12 points
 
 ## CHAPTER 9 — COMMON MISTAKES & HOW TO AVOID THEM
 
-| Mistake | Impact | Fix |
-|---|---|---|
-| Uploading without completing all metadata first | Misses freshness boost window | Always complete ALL metadata before hitting submit |
-| Using the first 10 keyword slots for generic single words | Destroys search ranking | Slots 1–10 must be specific 3-5 word buyer phrases |
-| Title over 70 characters | Truncated in search results, URL damage | Edit to <70 chars without losing key commercial terms |
-| Wrong category selection | Misses entire browsing buyer segment | Research the category top sellers use for your niche |
-| Not disclosing AI generation | Account warning / rejection | Always disclose, no exceptions |
-| Uploading duplicates | Rejection + quality score damage | Run duplicate check before every upload batch |
-| Ignoring the first 30 days performance window | Missed data signal for optimization | Track every new upload for 30 days |
-| Keyword stuffing with irrelevant terms | Dilution penalty, lower rankings | Quality over quantity — remove any keyword you're uncertain about |
-| Uploading seasonal content too late | Zero downloads before season ends | Upload 90–120 days before season target date |
-| Long upload inactivity gaps | Contributor rank decay | Upload at minimum 1 batch per week to maintain activity score |
-| Submitting images with text artifacts | Automatic rejection for AI images | Inspect every AI image at 100% zoom for text artifacts |
-| Using the same description for 16:9 and 1:1 versions | Weak metadata differentiation | Write unique title/keywords for each ratio — different buyer use cases |
+
+| Mistake                                                   | Impact                                  | Fix                                                                    |
+| --------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
+| Uploading without completing all metadata first           | Misses freshness boost window           | Always complete ALL metadata before hitting submit                     |
+| Using the first 10 keyword slots for generic single words | Destroys search ranking                 | Slots 1–10 must be specific 3-5 word buyer phrases                     |
+| Title over 70 characters                                  | Truncated in search results, URL damage | Edit to <70 chars without losing key commercial terms                  |
+| Wrong category selection                                  | Misses entire browsing buyer segment    | Research the category top sellers use for your niche                   |
+| Not disclosing AI generation                              | Account warning / rejection             | Always disclose, no exceptions                                         |
+| Uploading duplicates                                      | Rejection + quality score damage        | Run duplicate check before every upload batch                          |
+| Ignoring the first 30 days performance window             | Missed data signal for optimization     | Track every new upload for 30 days                                     |
+| Keyword stuffing with irrelevant terms                    | Dilution penalty, lower rankings        | Quality over quantity — remove any keyword you're uncertain about      |
+| Uploading seasonal content too late                       | Zero downloads before season ends       | Upload 90–120 days before season target date                           |
+| Long upload inactivity gaps                               | Contributor rank decay                  | Upload at minimum 1 batch per week to maintain activity score          |
+| Submitting images with text artifacts                     | Automatic rejection for AI images       | Inspect every AI image at 100% zoom for text artifacts                 |
+| Using the same description for 16:9 and 1:1 versions      | Weak metadata differentiation           | Write unique title/keywords for each ratio — different buyer use cases |
+
 
 ---
 

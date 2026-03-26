@@ -603,6 +603,45 @@ Run ALL batches every session. Use today's actual date in queries where noted.
 
 ---
 
+**DYNAMIC BATCH 9 — SEASONAL EVENTS & HOLIDAYS** *(medium priority — auto-detected from current date)*
+
+```
+"upcoming holidays events [current month] [current year]"
+"Christmas holiday season [current year] trends"
+"New Year celebration [current year] trends"
+"Halloween [current year] trends popular"
+"Valentine's Day [current year] trends"
+"Thanksgiving [current year] trends"
+"Easter spring [current year] trends"
+"Ramadan Eid [current year] trends"
+"summer events festivals [current year]"
+"back to school season [current year] trends"
+"Black Friday shopping trends [current year]"
+"Mother's Day Father's Day trends [current year]"
+```
+
+*Agent logic — date-driven activation:*
+```
+At session start, check today's date.
+Calculate which holidays/seasonal events fall within the next 90–120 days.
+Run ONLY the queries relevant to upcoming events in that window.
+Examples:
+  → If today is October: prioritize Halloween, Thanksgiving, Christmas, New Year queries
+  → If today is January: prioritize Valentine's Day, Easter, Spring queries
+  → If today is June: prioritize Summer, Independence Day, Back to School queries
+  → Always include at least 3–5 queries regardless of season
+
+Skip queries for seasons/events that are more than 120 days away.
+These are low-priority because stock images need to be uploaded 90–120 days
+in advance (per STOCK_SUCCESS_REPORT.md Chapter 5.1 seasonal calendar).
+Events within the next 30 days are too late — skip those too unless already
+uploading a backlog for next year's cycle.
+```
+
+*Visual translation targets: holiday decorations and scenes, family gatherings, seasonal food and gifting, festive lighting, cultural and religious celebrations, seasonal shopping, seasonal outdoor activities, seasonal fashion and lifestyle*
+
+---
+
 #### Dynamic Search Execution Protocol
 
 ```
@@ -615,12 +654,13 @@ EXECUTION ORDER:
 6. Run Batch 6 (Science/Health) — 10 queries
 7. Run Batch 7 (Social/Culture) — 10 queries
 8. Run Batch 8 (Environment) — 10 queries
+9. Run Batch 9 (Seasonal/Events) — 3–12 queries (date-driven, only relevant events)
 
 PARALLELIZATION:
 - Run queries within each batch in parallel (up to 5 at once)
 - Run batches sequentially (to respect rate limits)
-- Total queries per session: ~87 queries
-- Estimated time: 3–5 minutes
+- Total queries per session: ~87–99 queries (varies based on seasonal batch size)
+- Estimated time: 3–6 minutes
 
 DEDUPLICATION:
 - After all batches complete, deduplicate overlapping topics
@@ -815,9 +855,10 @@ ON EVERY SESSION START:
 ① Check static cache → valid? → load it (skip static searches)
                      → expired/missing? → run 15 static queries → build cache → save → load
 
-② Run 87 dynamic queries across 8 batches (always fresh, always current)
+② Run 87–99 dynamic queries across 9 batches (always fresh, always current)
    Priority order: World News → Economy → Finance → Technology → Business
                    → Science/Health → Social/Culture → Environment
+                   → Seasonal/Events (date-driven, relevant window only)
 
 ③ Synthesize: merge static cache intelligence + dynamic search results
    Apply scoring formula + boosters + disqualifiers
@@ -1309,7 +1350,8 @@ STEP 4: Click Generate (Arrow button) again
 - The prompt input still contains the same description from PHASE A
 - Click generate button
 - Verify: second generation has started
-- DO NOT wait for completion
+- Wait 1 second (allow the UI to register the generation job before proceeding)
+- DO NOT wait for generation to complete — proceed immediately after the 1s pause
 
 STEP 5: Update state
 - Mark current description as "batches_sent" in session_state.json
@@ -1743,7 +1785,8 @@ STEP 4: Hover over "Download"
 STEP 5: Click "2K upscaled"
 - Click on "2K upscaled" option in sub-menu
 - Observe: UI shows upscaling progress/indicator on that image
-- DO NOT WAIT for the upscaling to complete
+- Wait 1 second (allows the UI to register the request before moving on)
+- DO NOT wait for upscaling to complete
 - Mark the image as "upscale_requested" in session_state immediately
 - Move directly to the NEXT undownloaded image and repeat Steps 2–5
 
@@ -1775,23 +1818,24 @@ STEP 9: Continue submitting upscale requests for all remaining ready images
 #### Download Concurrency Strategy
 
 ```
-PARALLEL UPSCALING — All images upscale simultaneously.
+PARALLEL UPSCALING with a 1-second pace gap between requests.
 
-Multiple 2K upscale requests CAN and SHOULD be submitted back-to-back without
-waiting. Google Flow handles upscaling server-side per image independently.
-Each image that finishes upscaling downloads automatically — no manual intervention.
+Submit 2K upscale requests back-to-back with a 1-second wait between each one.
+This gives the UI just enough time to register each request before the next click,
+preventing missed interactions on fast machines while still running all upscales
+in parallel on the server side.
 
 Correct behavior:
-  Image 1 → right-click → 2K upscaled → DO NOT WAIT → next image
-  Image 2 → right-click → 2K upscaled → DO NOT WAIT → next image
-  Image 3 → right-click → 2K upscaled → DO NOT WAIT → next image
-  ... (all images submitted as fast as the UI allows)
-  Downloads arrive in background as each upscale completes
+  Image 1 → right-click → 2K upscaled → Wait 1 second → next image
+  Image 2 → right-click → 2K upscaled → Wait 1 second → next image
+  Image 3 → right-click → 2K upscaled → Wait 1 second → next image
+  ... (all images submitted with a 1s gap between each)
+  Downloads arrive in the background as each upscale completes on the server
 
 Incorrect behavior (do NOT do this):
-  ✗ Click 2K upscaled on Image 1 → wait for download → then click Image 2
-  ✗ Waiting between upscale requests
-  ✗ Checking upscale progress before moving to next image
+  ✗ Click 2K upscaled on Image 1 → wait for download to complete → then click Image 2
+  ✗ Waiting more than 1–2 seconds between upscale requests
+  ✗ Checking upscale progress or download status before moving to next image
 ```
 
 #### Download Verification
@@ -1855,7 +1899,7 @@ STEP 1 — STATIC CACHE CHECK:
                                Load into memory ──────────────────────► │
                                                                         ▼
 STEP 2 — DYNAMIC SEARCH (always runs):
-Run 87 queries across 8 priority batches:
+Run 87–99 queries across 9 priority batches:
   Batch 1: World News & Geopolitics       (10 queries)
   Batch 2: Economy & Markets              (10 queries)  ← PRIMARY FOCUS
   Batch 3: Money, Finance & Fintech       (12 queries)  ← PRIMARY FOCUS
@@ -1864,6 +1908,7 @@ Run 87 queries across 8 priority batches:
   Batch 6: Science, Health & Medicine     (10 queries)
   Batch 7: Social, Cultural & Lifestyle   (10 queries)
   Batch 8: Environment & Climate          (10 queries)
+  Batch 9: Seasonal Events & Holidays     (3–12 queries, date-driven)
      │
      ▼
 STEP 3 — SYNTHESIS:
@@ -2091,8 +2136,8 @@ C:\AdobeStockAutomation\
     "selectors_registry_file": "C:\\AdobeStockAutomation\\data\\selectors_registry.json",
     "static_cache_max_age_days": 90,
     "static_cache_force_refresh": false,
-    "dynamic_search_batches": 8,
-    "dynamic_queries_per_session": 87,
+    "dynamic_search_batches": 9,
+    "dynamic_queries_per_session": "87–99 (varies by seasonal batch size)",
     "dynamic_batch_parallelism": 5,
     "priority_search_domains": ["economy", "finance", "technology", "world_news", "business"],
     "viewport_width": 1920,
