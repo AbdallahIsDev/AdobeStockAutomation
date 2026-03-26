@@ -74,8 +74,8 @@ This file contains the complete strategic knowledge base that governs every deci
 
 **Output of this file feeds directly into:**
 
-- `FILE_02_METADATA_OPTIMIZER.md` — titles, keywords, categories
-- `FILE_03_ADOBE_STOCK_UPLOADER.md` — upload + submit pipeline
+- `02_IMAGE_UPSCALER.md` — 4K upscaling & download management
+- `03_METADATA_OPTIMIZER.md` — titles, keywords, categories & Adobe Stock upload pipeline
 
 ---
 
@@ -132,21 +132,26 @@ STEP 9: On completion → write final summary to automation_log.txt
 {
   "session_date": "YYYY-MM-DD",
   "current_account_index": 0,
+  "current_project_url": "[RESOLVED_AT_RUNTIME]",
+  "current_project_id": "[RESOLVED_AT_RUNTIME]",
   "accounts": [
     {
       "email": "account1@gmail.com",
       "nano_banana_2_exhausted": false,
       "nano_banana_pro_exhausted": false,
-      "fully_exhausted": false
+      "fully_exhausted": false,
+      "last_project_id": "[RESOLVED_AT_RUNTIME]"
     }
   ],
   "current_model": "Nano Banana 2",
   "current_aspect_ratio": "16:9",
+  "loop_index": 0,
+  "current_description_index": 0,
   "descriptions_queue": [],
-  "descriptions_completed": [],
   "images_created_count": 0,
   "images_downloaded_count": 0,
-  "current_description_index": 0,
+  "upscale_requested_ids": [],
+  "downloaded_images": [],
   "errors": []
 }
 ```
@@ -862,7 +867,7 @@ Every description must:
 7. **Avoid real people descriptions** — use "diverse professional woman in her 30s" not a real name
 8. **Include at least one commercial use signal** — "suitable for website hero image", "perfect for business presentation background"
 9. **Never include copyrighted characters, places with IP restrictions**
-10. **End with quality signal** — "photorealistic", "ultra-detailed", "professional stock photography quality"
+10. **End with quality signal** — "photorealistic", "ultra-detailed", "high-resolution", "professional stock photography quality"
 
 ### Description Templates by Category
 
@@ -900,7 +905,7 @@ Template: Abstract [concept] visualized as [visual metaphor], [color palette], [
 
 *1:1 description:*
 
-> Close-up portrait of a confident young Black male professional in a modern office setting, a subtle glowing AI interface reflection visible in his glasses, soft studio lighting, sharp focus on face, authentic engaged expression, clean blurred background, photorealistic, professional business stock photography, perfect for technology brand campaigns and LinkedIn advertising.
+> Close-up portrait of a confident young White male professional in a modern office setting, a subtle glowing AI interface reflection visible in his glasses, soft studio lighting, sharp focus on face, authentic engaged expression, clean blurred background, photorealistic, professional business stock photography, perfect for technology brand campaigns and LinkedIn advertising.
 
 **Trend: "Mental Health & Mindfulness"**
 
@@ -917,7 +922,8 @@ Template: Abstract [concept] visualized as [visual metaphor], [color palette], [
 ```json
 {
   "generated_at": "YYYY-MM-DDTHH:MM:SSZ",
-  "total_descriptions": 20,
+  "total_descriptions": "[dynamic — 2 per trend, varies by session]",
+  "loop_index": 0,
   "descriptions": [
     {
       "id": 1,
@@ -943,7 +949,9 @@ Template: Abstract [concept] visualized as [visual metaphor], [color palette], [
 }
 ```
 
-**Target: 2 descriptions per trend × 10 trends = 20 descriptions = 80 images per full session.**
+**Continuous Loop Strategy:**
+
+Descriptions are not a fixed quota. Sub-Agent B produces 2 descriptions per trend × however many trends were identified. Once Sub-Agent C finishes generating images for ALL descriptions in the current queue, it does **not** stop — it loops back to the first trend and repeats the entire process from the beginning, cycling through all descriptions again. This loop continues indefinitely until all account credits across all accounts are exhausted. There is no fixed image count per session — the system runs for as long as there is credit available. New accounts added to `accounts.json` are automatically picked up in future sessions, extending the loop capacity without any code changes.
 
 ---
 
@@ -956,8 +964,36 @@ Controls the Google Flow AI browser interface to generate images using the descr
 ### Target URL
 
 ```
-https://labs.google/fx/tools/flow/project/af875b0e-6845-4479-a696-685a426dea88
+https://labs.google/fx/tools/flow/project/{Project_Id}
 ```
+
+**The `{Project_Id}` is NEVER hardcoded.** It changes with every account and every new project. The agent must resolve the current project ID dynamically at runtime using the following procedure:
+
+```
+PROJECT ID RESOLUTION:
+─────────────────────
+STEP 1: After logging in, navigate to the Flow landing page:
+        https://labs.google/fx/tools/flow
+
+STEP 2: On the landing page, locate the project list / recent projects panel
+        (typically shown as image thumbnails on the left sidebar or main grid)
+
+STEP 3: Click the FIRST / MOST RECENT project visible
+        — this is always the active working project for the current session
+
+STEP 4: Once the project page loads, read the current URL from the browser
+        The URL will be in the format:
+        https://labs.google/fx/tools/flow/project/[some-uuid]
+        Extract and store: current_project_id = [some-uuid]
+
+STEP 5: Save current_project_id to session_state.json under the current account
+        This is the URL the agent will use for the remainder of the session
+
+STEP 6: On account switch → repeat steps 1–5 for the new account
+        Each account may have a different active project ID
+```
+
+**Never assume the project ID from a previous session or a different account is still valid.** Always resolve it fresh after each login.
 
 ### Browser Automation Core
 
@@ -988,16 +1024,38 @@ For any element that appears on hover/click:
 ### 4.1 — INITIALIZATION & NAVIGATION
 
 ```
-STEP 1: Browser Setup
-- Launch Chromium/Chrome with existing user profile (to retain Google login session)
-- Profile path: C:\Users\11\AppData\Local\Google\Chrome\User Data\Default
-- Or use: --user-data-dir="C:\Users\11\ChromeAutomationProfile"
-- Set viewport: 1920×1080 (ensures all UI elements are visible and not collapsed)
-- Disable notifications popup: --disable-notifications
-- Set timezone: matches current system timezone
+STEP 1: Browser Setup — Launch via browser-automation-core
+─────────────────────────────────────────────────────────
+The agent ALWAYS uses the shared debug browser session managed by the
+browser-automation-core framework. Never launch a raw Chrome process directly.
+
+Launch command:
+  C:\Users\11\browser-automation-core\launch_browser.bat 9222 GoogleFlowProfile
+
+This bat file:
+  → Launches Chrome on CDP debug port 9222
+  → Uses an isolated named profile "GoogleFlowProfile" (retains Google login sessions)
+  → Handles --remote-debugging-port, --no-first-run, --disable-notifications flags
+  → Sets viewport-friendly window size
+
+After launching, connect via CDP:
+  → CDP endpoint: http://localhost:9222
+  → Use browser_core.ts → connectBrowser(9222) to attach
+  → Use isDebugPortReady(9222) as health check before connecting
+
+If the browser is ALREADY running on port 9222 (from a previous session):
+  → Skip launch entirely
+  → Connect directly via connectBrowser(9222)
+  → Verify the port is responding: isDebugPortReady(9222) → true
+
+Viewport: 1920×1080 (set inside launch_browser.bat via --window-size flag)
+Timezone: inherits system timezone automatically
 
 STEP 2: Navigate to Flow Project
-- Navigate to: https://labs.google/fx/tools/flow/project/af875b0e-6845-4479-a696-685a426dea88
+- Navigate to: https://labs.google/fx/tools/flow (landing page first)
+- Click the most recent project from the project list (see Target URL section above)
+- This resolves the current account's active project URL dynamically
+- Store the resolved project URL in session_state.json: current_project_url
 - Wait for: page fully loaded (networkidle or DOM stable for 2s)
 - Verify: page title contains "Flow" OR prompt input box is visible
 
@@ -1017,17 +1075,34 @@ STEP 3: Handle "New Image Aspect Ratios" Modal (one-time only)
 ```
 TRIGGER ACTION:
 - Locate the settings button in the bottom toolbar of the prompt input area
-- This is the button that shows: [banana emoji] "Nano Banana 2" [rectangle icon] "x4"
+- This button sits to the LEFT of the generate/arrow button inside the prompt bar
+- Its visual content varies depending on the current state:
+    → If last used for IMAGE: may show a model name + aspect ratio icon + quantity
+    → If last used for VIDEO: will show video-related settings — no model name at all
+    → The exact text/icons on this button are NOT reliable identifiers
 - Click this button to open the settings panel
+
+DISCOVERY APPROACH:
+- Do NOT rely on button text like "Nano Banana 2" or a banana emoji — these change
+- Instead, identify the button by its position: it is a clickable element in the
+  bottom toolbar of the prompt area, to the left of the arrow/send button
+- Use structural selectors: find the toolbar container first, then locate the
+  non-arrow button within it
+- Once opened, the settings panel will ALWAYS contain: Image/Video tabs,
+  aspect ratio buttons, quantity buttons, and model selector — use these
+  inner elements to confirm the panel opened correctly
 
 WAIT FOR: Settings panel DOM to appear (React renders it on click)
 ```
 
-**Selector Target (Settings Button):**
+**Selector Discovery Note:**
 
 ```
-Trigger: click on element containing text "Nano Banana" + banana emoji in the prompt toolbar
-Post-click: wait for settings panel container to appear in DOM
+The settings trigger button must be discovered from the live DOM.
+See Section 4.6 for the selector registry and discovery protocol.
+All selectors marked [DISCOVERED_AT_RUNTIME] or [DISCOVERED_AFTER_TRIGGER]
+must be populated by running the selector discovery process on the live page
+before this automation script can execute reliably.
 ```
 
 #### B. Verify/Set Output Type to IMAGE (not Video)
@@ -1044,13 +1119,39 @@ SETTINGS PANEL — TAB SELECTION:
 **Decision Logic:**
 
 ```
-if (imageTab.classList.contains('active') || imageTab.getAttribute('aria-selected') === 'true'):
+LOGIC (pseudocode — selectors must be resolved from live DOM before use):
+─────────────────────────────────────────────────────────────────────────
+Read imageTab element from selectors_registry.json → selectors.tab_image
+
+if imageTab is active (check aria-selected="true" OR active CSS class):
     → skip, already on Image
 else:
     → click imageTab
     → wait 500ms
     → verify imageTab is now active
+    → if still not active → retry up to 3 times
 ```
+
+> ⚠ **SELECTOR VALIDATION REQUIRED**
+> The class names, `aria-selected`, and active-state attributes used above are
+> **illustrative pseudocode only** — they have NOT been validated against the live
+> Google Flow DOM. All selector values in this file marked `[DISCOVERED_AT_RUNTIME]`
+> or `[DISCOVERED_AFTER_TRIGGER]` are placeholders until the selector discovery
+> process runs against the live page (see Section 4.6).
+>
+> **Agent prompt to populate valid selectors:**
+> ```
+> Open https://labs.google/fx/tools/flow/project/[current-project-id] in the
+> debug Chrome session on port 9222. Run the selector discovery protocol defined
+> in Section 4.6 of this file. For every element that requires a trigger (hover/click)
+> to appear in the DOM, simulate that interaction first, wait for the DOM to update,
+> then extract and record the most stable selector available (prefer data-testid,
+> data-*, aria-label, then id — never use auto-generated hash class names).
+> Save all discovered selectors to:
+> C:\AdobeStockAutomation\data\selectors_registry.json
+> Set "selectors_discovered": true once all elements have been found.
+> Do not proceed with image generation automation until this file is populated.
+> ```
 
 #### C. Set Aspect Ratio
 
@@ -1212,12 +1313,18 @@ STEP 4: Click Generate (Arrow button) again
 
 STEP 5: Update state
 - Mark current description as "batches_sent" in session_state.json
-- Increment descriptions_completed index
 
-STEP 6: Move to next description
+STEP 6: Move to next description OR loop back
 - Increment current_description_index in state
-- If more descriptions remain → go back to PHASE A with new description
-- If all descriptions sent → proceed to DOWNLOAD PHASE
+- If more descriptions remain in current loop pass → go back to PHASE A with new description
+- If ALL descriptions in the queue have been sent (end of current loop pass):
+    → DO NOT stop
+    → Increment loop_index counter in session_state.json
+    → Log: "Loop [N] complete. All descriptions cycled. Starting loop [N+1]."
+    → Reset current_description_index to 0
+    → Go back to PHASE A with the FIRST description again (loop restart)
+    → Continue until a rate limit is hit → trigger rate limit handler
+    → Only stop when ALL accounts across ALL models are fully exhausted
 ```
 
 #### Critical Timing Rules
@@ -1386,10 +1493,10 @@ All selectors must be discovered dynamically at first run and saved to `selector
       "interaction": "click"
     },
     "settings_trigger_button": {
-      "description": "Button showing 'Nano Banana 2' + rectangle + x4 that opens settings panel",
+      "description": "Settings button in the bottom prompt toolbar, to the left of the generate/arrow button. Opens the image/video settings panel on click. Its visible text and icons vary depending on last-used mode — do NOT use text content as selector. Identify by structural position within the prompt toolbar container.",
       "trigger_required": false,
       "selector": "[DISCOVERED_AT_RUNTIME]",
-      "fallback_text_match": "Nano Banana",
+      "discovery_strategy": "Find the prompt toolbar container, then locate the non-arrow, non-input button element within it. Prefer data-testid, aria-label, or positional structural selector.",
       "interaction": "click to open settings panel"
     },
     "settings_panel_container": {
@@ -1526,29 +1633,54 @@ All selectors must be discovered dynamically at first run and saved to `selector
 }
 ```
 
-#### Dynamic Selector Discovery Protocol
+#### Selector Caching & Re-Discovery Protocol
 
 ```
 FIRST RUN — DISCOVERY MODE:
-1. Open Flow project in browser
-2. For each selector in registry where trigger_required == false:
-   a. Query DOM for element matching fallback_text_match or fallback_aria
-   b. Extract the most stable, unique CSS selector or data-attribute
-   c. Save to selectors_registry.json
+─────────────────────────────────────────────────────
+Runs ONCE when selectors_registry.json does not exist OR
+"selectors_discovered" field is false.
 
-3. For each selector requiring a trigger:
-   a. Execute the trigger_action (click/hover the trigger element)
-   b. Wait for DOM mutation (MutationObserver, 2s timeout)
-   c. Query DOM for newly rendered element
+1. Open the Flow project page in the debug browser
+2. For each selector where trigger_required == false:
+   a. Query live DOM for element matching discovery_strategy / fallback hints
+   b. Extract the most stable, unique selector (priority order below)
+   c. Write to selectors_registry.json
+
+3. For each selector where trigger_required == true:
+   a. Execute the trigger_action (click/hover the parent element)
+   b. Wait for DOM mutation to settle (MutationObserver or waitForSelector, 2s)
+   c. Query newly rendered element in DOM
    d. Extract stable selector
-   e. Save to selectors_registry.json
+   e. Write to selectors_registry.json
 
-SUBSEQUENT RUNS — CACHED MODE:
-1. Load selectors_registry.json
-2. Before using any selector, run a quick DOM.querySelector() check
-3. If selector still valid → use it directly
-4. If selector no longer valid (DOM changed / React re-rendered) → 
-   re-run discovery for that specific selector and update registry
+4. Set "selectors_discovered": true in selectors_registry.json
+5. Set "last_updated" timestamp
+
+SUBSEQUENT RUNS — CACHE-FIRST MODE (default):
+─────────────────────────────────────────────────────
+1. At startup: load selectors_registry.json into memory — instant, no DOM access
+2. Use cached selectors directly for all automation actions
+3. DO NOT validate selectors against the DOM on every run — this is slow and wasteful
+
+ON-FAILURE RE-DISCOVERY (only when an action fails):
+─────────────────────────────────────────────────────
+A "failure" is defined as: the agent attempted to click/interact with a cached
+selector and the action produced no effect OR the element was not found.
+
+When a failure occurs:
+1. Log: "Selector failed: [selector_key] = [cached_value]. Re-discovering."
+2. Re-run discovery for ONLY the specific failed selector (not the full registry)
+3. Simulate the required trigger interaction to expose the element if needed
+4. Extract the new selector value from the updated DOM
+5. Overwrite ONLY that specific entry in selectors_registry.json
+6. Update "last_updated" timestamp
+7. Retry the failed action with the newly discovered selector
+8. If re-discovery also fails → log error → apply retry policy (Part 6) → continue
+
+Key rule: The DOM is NEVER scraped as a routine step. Scraping only happens:
+  a. First run (discovery mode, once)
+  b. On selector action failure (targeted, single-selector update only)
 ```
 
 #### Selector Stability Priority
@@ -1574,14 +1706,17 @@ After all generation jobs have been queued, wait for images to appear in the pro
 
 ```
 MONITORING STRATEGY:
-- After all prompts have been submitted, enter a polling loop
-- Every 15 seconds, check the project gallery for new images
+- The download phase runs CONCURRENTLY with the generation loop — do not wait
+  for all generation jobs to finish before starting downloads
+- Poll the project gallery every 15 seconds for newly rendered image thumbnails
 - An image is "ready" when:
   a. Its thumbnail is fully rendered (not a spinner/placeholder)
-  b. It has not yet been processed by Sub-Agent C (not in downloaded_images list)
-- Continue polling until:
-  a. All expected images are found (total_descriptions × 8), OR
-  b. Timeout of 20 minutes reached (in case some generations fail silently)
+  b. It has not yet been processed (not in session_state.downloaded_images list)
+- There is NO fixed expected count — the gallery grows continuously as long as
+  generation jobs are running and accounts have credit
+- Continue polling indefinitely until:
+  a. The generation loop has fully stopped (all accounts exhausted), AND
+  b. All remaining rendered thumbnails have been downloaded
 ```
 
 #### Download Loop: For Each Ready Image
@@ -1607,47 +1742,71 @@ STEP 4: Hover over "Download"
 
 STEP 5: Click "2K upscaled"
 - Click on "2K upscaled" option in sub-menu
-- Observe: UI shows upscaling progress/indicator
-- Wait: upscaling completes (variable time, typically 10–30 seconds)
-- Result: file automatically downloads to system default downloads folder
+- Observe: UI shows upscaling progress/indicator on that image
+- DO NOT WAIT for the upscaling to complete
+- Mark the image as "upscale_requested" in session_state immediately
+- Move directly to the NEXT undownloaded image and repeat Steps 2–5
 
-STEP 6: Verify download
-- Monitor system downloads folder for new file
-- File naming pattern from Flow: [some-hash]-upscaled.png or similar
-- Once file appears in downloads → mark image as downloaded in session_state
+STEP 6: Parallel upscaling (all images upscale simultaneously)
+- Multiple 2K upscale jobs run in parallel on Google's servers — this is normal
+- Once an upscale job finishes, the file downloads automatically to the
+  system downloads folder (no further action needed per image)
+- There is no error risk from parallel upscaling — the server handles concurrency
 
-STEP 7: Rename downloaded file
-- Rename the file to a structured naming convention for downstream processing:
-  Format: [trend_topic]_[aspect_ratio]_[index]_[timestamp].png
-  Example: ai_productivity_16x9_001_20260323.png
-- Move file to designated output folder:
-  Path: C:\AdobeStockAutomation\downloads\[session_date]\
+STEP 7: Monitor downloads folder passively
+- While new upscale requests are being submitted for remaining images,
+  a background watcher monitors the system downloads folder
+- When a new file appears: rename it using the structured naming convention:
+  Format: [trend_topic]_[aspect_ratio]_[loop_index]_[index]_[timestamp].png
+  Example: ai_productivity_16x9_L2_001_20260323.png
+- Move renamed file to: C:\AdobeStockAutomation\downloads\[session_date]\
 
-STEP 8: Update state
+STEP 8: Update state per confirmed download
 - Add image to session_state.images_downloaded list
 - Increment images_downloaded_count
-- Log: "Downloaded image [N] of [total]"
+- Log: "Downloaded: [filename]"
 
-STEP 9: Repeat for all remaining images
+STEP 9: Continue submitting upscale requests for all remaining ready images
+- Do not pause between images while waiting for any prior upscale to finish
+- The goal: submit all 2K upscale requests as fast as possible, let them
+  all process in parallel, collect downloads as they arrive automatically
 ```
 
 #### Download Concurrency Strategy
 
 ```
-Do NOT attempt to download multiple images simultaneously.
-The upscaling process uses server resources per image.
-Sequential downloading is required to avoid errors.
+PARALLEL UPSCALING — All images upscale simultaneously.
 
-Download one image, wait for confirmation → then move to next image.
+Multiple 2K upscale requests CAN and SHOULD be submitted back-to-back without
+waiting. Google Flow handles upscaling server-side per image independently.
+Each image that finishes upscaling downloads automatically — no manual intervention.
+
+Correct behavior:
+  Image 1 → right-click → 2K upscaled → DO NOT WAIT → next image
+  Image 2 → right-click → 2K upscaled → DO NOT WAIT → next image
+  Image 3 → right-click → 2K upscaled → DO NOT WAIT → next image
+  ... (all images submitted as fast as the UI allows)
+  Downloads arrive in background as each upscale completes
+
+Incorrect behavior (do NOT do this):
+  ✗ Click 2K upscaled on Image 1 → wait for download → then click Image 2
+  ✗ Waiting between upscale requests
+  ✗ Checking upscale progress before moving to next image
 ```
 
 #### Download Verification
 
 ```
-After all expected images are processed:
-1. Compare session_state.images_downloaded_count vs session_state.images_created_count
-2. If downloaded < created → scan for any missed images in gallery → retry download
-3. Log final count: "Session complete. X images downloaded to [output_folder]"
+Since the session runs as a continuous loop with no fixed image target:
+1. After the generation loop fully stops (all accounts exhausted):
+   - Continue polling the gallery for any remaining ready-but-not-yet-downloaded images
+   - Submit 2K upscale requests for any missed images
+   - Wait for all pending downloads to arrive (monitor downloads folder)
+2. Once no new images appear in the gallery for 2 consecutive poll cycles (30s):
+   - Consider the download phase complete
+3. Log final summary:
+   "Session complete. [N] images downloaded to [output_folder]. [N] loop passes completed."
+4. Write final counts to session_state.json and automation_log.txt
 ```
 
 ---
@@ -1709,98 +1868,134 @@ Run 87 queries across 8 priority batches:
      ▼
 STEP 3 — SYNTHESIS:
 Merge static cache + dynamic results
-Apply scoring: live_signal + commercial + visual
-              + cache_alignment + competition + longevity
-Apply boosters: tech×finance (+2.0), cache match (+1.5),
-               low competition niche (+1.0), multi-source (+0.5)
-Apply disqualifiers: real people, one-day flash, violent, IP
-
-Cross-reference scoring against STOCK_SUCCESS_REPORT.md:
-  → Prioritize niches confirmed in Chapter 1.3 top-performer table
-  → Filter against Chapter 2.3 low-value image traits
-  → Validate commercial use cases against Chapter 2.1 buyer archetypes
-
+Apply scoring formula + boosters + disqualifiers
+Cross-reference against STOCK_SUCCESS_REPORT.md chapters
 Sort by score → Take top 10–15
      │
      ▼
-Output: trend_data.json (10–15 scored trends)
-Each trend includes: score, news_context, commercial_use_cases,
-visual_keywords, recommended compositions for 16:9 AND 1:1
+Output: trend_data.json
      │
      ▼
 SUB-AGENT B: Description Generator
 ─────────────────────────────────────
 For each trend:
-  → Create 16:9 optimized description (landscape/wide scene)
-    guided by: Chapter 6.4 (16:9 buyer demand), Chapter 2.2 (winning image traits)
-  → Create 1:1 optimized description (centered/portrait)
-    guided by: Chapter 6.4 (1:1 buyer demand), Chapter 2.1 (buyer archetypes)
+  → Create 16:9 optimized description
+  → Create 1:1 optimized description
      │
      ▼
-Output: descriptions.json (20 descriptions)
+Output: descriptions.json (2 per trend, no fixed total)
      │
      ▼
 SUB-AGENT C: Image Creation Agent
 ───────────────────────────────────
-Navigate to Flow project
-Handle "New Aspect Ratios" modal if present
+BROWSER SETUP:
+  → Check if debug browser already running on port 9222
+  → If not: launch C:\Users\11\browser-automation-core\launch_browser.bat 9222 GoogleFlowProfile
+  → Connect via CDP: connectBrowser(9222)
+  → Health check: isDebugPortReady(9222)
+
+SELECTOR CHECK:
+  → Load selectors_registry.json
+  → If "selectors_discovered" == false → run full discovery protocol (Section 4.6)
+  → If already discovered → use cached selectors directly
+
+NAVIGATE:
+  → Go to https://labs.google/fx/tools/flow
+  → Click most recent project → read URL → store current_project_id
+  → Handle "New Aspect Ratios" modal if present → click "Get Started"
+
+SETTINGS VERIFICATION:
+  → Open settings panel
+  → Ensure Image tab is selected (not Video)
+  → Ensure x4 quantity is selected
+  → Ensure correct model is selected (Nano Banana 2 by default)
+  → Close settings panel
      │
      ▼
-FOR EACH description:
+╔══════════════════════════════════════════════════════╗
+║         INFINITE GENERATION LOOP                     ║
+║  Runs until ALL accounts + ALL models are exhausted  ║
+╚══════════════════════════════════════════════════════╝
+     │
+     ▼
+loop_index = 0
+current_description_index = 0
+     │
+     ▼
+FOR EACH description (cycling — restarts from 0 when all done):
   │
   ├─ PHASE A: Enter description
-  │           Set 16:9, x4, [current model]
-  │           Click Generate → DO NOT WAIT
+  │           Open settings → set 16:9 → verify x4 + model → close
+  │           Click Generate → DO NOT WAIT → proceed immediately
   │
-  └─ PHASE B: Change to 1:1
-              Click Generate → DO NOT WAIT
-              → Next description
+  └─ PHASE B: Open settings → change to 1:1 → close
+              Click Generate → DO NOT WAIT → proceed immediately
+              Mark description "batches_sent" in state
+              │
+              ▼
+              More descriptions? → YES → next description (PHASE A)
+                                 → NO (end of queue) →
+                                   loop_index++
+                                   LOG: "Loop [N] complete. Restarting."
+                                   Reset index to 0
+                                   Restart from first description
      │
-     ▼ (after all descriptions queued)
-DOWNLOAD PHASE:
-───────────────
-Poll gallery every 15s for ready images
-For each ready image:
-  Right-click → Download → 2K Upscaled
-  Wait for upscaling → auto-download
-  Rename → Move to output folder
+     ▼ (RUNS IN PARALLEL with generation loop — not sequential)
+DOWNLOAD PHASE (concurrent background process):
+────────────────────────────────────────────────
+Poll gallery every 15s for newly rendered thumbnails
+For each new ready image:
+  → right-click → Download → 2K upscaled → DO NOT WAIT → next image
+  → All upscale jobs run in parallel on server
+  → Files auto-download as each upscale completes
+  → Background watcher renames + moves each file to output folder
+  → Update session_state per confirmed download
      │
-     ▼ (during generation loop, if rate limit hit)
+     ▼ (triggered at any point during the generation loop)
 RATE LIMIT HANDLER:
 ────────────────────
-If Nano Banana 2 limit:
-  → Switch to Nano Banana Pro
-  → Continue loop
+If Nano Banana 2 limit reached:
+  → session_state: nano_banana_2_exhausted = true
+  → Switch model to Nano Banana Pro
+  → LOG: "Model switched → Nano Banana Pro"
+  → Resume generation loop from interrupted point
 
-If both models exhausted for current account:
-  → Sign out
-  → Sign in with next available account
-  → Verify login
-  → Navigate to project
-  → Continue loop from interrupted point
+If Nano Banana Pro ALSO exhausted (current account fully done):
+  → session_state: fully_exhausted = true for this account
+  → LOG: "Account [email] exhausted. Switching account."
+  → Sign out of current account
+  → Navigate to: https://labs.google/fx/tools/flow → "Create with Flow"
+  → Sign in with next non-exhausted account from accounts.json
+  → Handle "New Aspect Ratios" modal if present
+  → Resolve new project ID dynamically
+  → Reset model to Nano Banana 2
+  → Resume generation loop
 
-If ALL accounts exhausted:
-  → Proceed to download phase
-  → Exit after download complete
+If ALL accounts fully exhausted:
+  → LOG: "SYSTEM HALT: All accounts and models exhausted."
+  → EXIT generation loop
+  → Let download phase finish all pending upscales
+  → Proceed to session complete
      │
      ▼
 SESSION COMPLETE
 ─────────────────
+Wait for all pending downloads to finish (2 empty poll cycles = done)
 Update session_state.json (final)
 Write automation_log.txt summary:
   - Date/time
   - Report file read: confirmed
-  - Static cache status (loaded/rebuilt, age)
+  - Static cache status + age
   - Dynamic queries run: 87
-  - Trend topics identified + top 10 used
-  - Accounts used
-  - Models used
-  - Images created count
-  - Images downloaded count
+  - Trend topics used
+  - Loop passes completed: [N]
+  - Total images created
+  - Total images downloaded
+  - Accounts used + exhaustion status
   - Output folder path
-  - Any errors encountered
+  - Errors encountered
 
-Pass output folder path to FILE_02_METADATA_OPTIMIZER.md
+Pass output folder path to 02_IMAGE_UPSCALER.md
 EXIT
 ```
 
@@ -1848,23 +2043,29 @@ C:\AdobeStockAutomation\
 │
 ├── downloads\
 │   └── [YYYY-MM-DD]\
-│       ├── ai_productivity_16x9_001_20260323.png
-│       ├── ai_productivity_1x1_002_20260323.png
-│       ├── mental_health_16x9_003_20260323.png
-│       └── ...
+│       ├── ai_finance_16x9_L1_001_20260323.png
+│       ├── ai_finance_1x1_L1_002_20260323.png
+│       ├── climate_tech_16x9_L1_003_20260323.png
+│       └── ...  (no fixed count — grows until all credits exhausted)
 │
 ├── data\
 │   ├── STOCK_SUCCESS_REPORT.md          ← READ FIRST on every session (Step 0)
-│   ├── session_state.json               ← updated every session
-│   ├── trend_data.json                  ← regenerated every session (dynamic output)
-│   ├── descriptions.json                ← regenerated every session
-│   ├── accounts.json                    ← static, manually maintained
-│   ├── selectors_registry.json          ← auto-built, refreshed when DOM changes
+│   ├── session_state.json               ← updated continuously during session
+│   ├── trend_data.json                  ← regenerated every session
+│   ├── descriptions.json                ← regenerated every session (2 per trend)
+│   ├── accounts.json                    ← manually maintained, add accounts freely
+│   ├── selectors_registry.json          ← built ONCE, updated only on selector failure
 │   └── static_knowledge_cache.json      ← built ONCE, refreshed every 90 days
 │
-└── logs\
-    ├── automation_log_[YYYY-MM-DD].txt
-    └── cache_build_log_[YYYY-MM-DD].txt  ← written only when cache is rebuilt
+├── logs\
+│   ├── automation_log_[YYYY-MM-DD].txt
+│   └── cache_build_log_[YYYY-MM-DD].txt
+│
+└── [depends on] C:\Users\11\browser-automation-core\
+    ├── launch_browser.bat               ← called to start CDP debug browser
+    ├── launch_browser.ps1
+    ├── browser_core.ts                  ← connectBrowser, fastClick, fastFill, etc.
+    └── selector_store.ts                ← selector caching pattern (reference)
 ```
 
 ---
@@ -1876,13 +2077,18 @@ C:\AdobeStockAutomation\
   "config": {
     "success_report_path": "C:\\AdobeStockAutomation\\data\\STOCK_SUCCESS_REPORT.md",
     "success_report_required": true,
-    "flow_project_url": "https://labs.google/fx/tools/flow/project/af875b0e-6845-4479-a696-685a426dea88",
+    "browser_automation_core": "C:\\Users\\11\\browser-automation-core",
+    "launch_browser_bat": "C:\\Users\\11\\browser-automation-core\\launch_browser.bat",
+    "cdp_port": 9222,
+    "chrome_profile_name": "GoogleFlowProfile",
     "flow_landing_url": "https://labs.google/fx/tools/flow",
-    "browser_profile_path": "C:\\Users\\11\\ChromeAutomationProfile",
+    "flow_project_url_template": "https://labs.google/fx/tools/flow/project/{Project_Id}",
+    "flow_project_id": "[RESOLVED_DYNAMICALLY_AT_RUNTIME — never hardcode]",
     "output_folder": "C:\\AdobeStockAutomation\\downloads",
     "data_folder": "C:\\AdobeStockAutomation\\data",
     "logs_folder": "C:\\AdobeStockAutomation\\logs",
     "static_cache_file": "C:\\AdobeStockAutomation\\data\\static_knowledge_cache.json",
+    "selectors_registry_file": "C:\\AdobeStockAutomation\\data\\selectors_registry.json",
     "static_cache_max_age_days": 90,
     "static_cache_force_refresh": false,
     "dynamic_search_batches": 8,
@@ -1893,43 +2099,43 @@ C:\AdobeStockAutomation\
     "viewport_height": 1080,
     "models_priority": ["Nano Banana 2", "Nano Banana Pro"],
     "aspect_ratios": ["16:9", "1:1"],
-    "images_per_batch": 4,
-    "images_per_description": 8,
-    "target_descriptions_per_session": 20,
-    "target_images_per_session": 80,
+    "images_per_generation_batch": 4,
+    "descriptions_per_trend": 2,
+    "generation_loop": "infinite — runs until all account credits exhausted",
+    "upscaling_mode": "parallel — submit all 2K requests without waiting",
     "poll_interval_seconds": 15,
-    "generation_timeout_minutes": 20,
-    "upscale_timeout_seconds": 60,
     "dom_settle_ms": 500,
     "page_load_timeout_ms": 30000,
     "retry_max": 3,
-    "retry_base_delay_ms": 2000
+    "retry_base_delay_ms": 2000,
+    "next_pipeline_file": "02_IMAGE_UPSCALER.md"
   }
 }
 ```
 
 ---
 
-## HANDOFF TO FILE 02
+## HANDOFF TO 02_IMAGE_UPSCALER
 
-Upon successful session completion, this system writes to `session_state.json`:
+Upon session completion (or when the generation loop pauses between account switches), this system writes to `session_state.json`:
 
 ```json
 {
   "file_01_status": "complete",
-  "handoff_to_file_02": {
-    "images_ready_for_metadata": true,
+  "handoff_to_02_upscaler": {
+    "images_ready_for_processing": true,
     "images_folder": "C:\\AdobeStockAutomation\\downloads\\[YYYY-MM-DD]",
-    "image_count": 80,
-    "trend_topics_used": ["AI Productivity", "Mental Health", "..."],
+    "images_downloaded_count": "[dynamic — no fixed number]",
+    "loop_passes_completed": "[N]",
+    "trend_topics_used": ["AI Finance", "Climate Tech", "..."],
     "descriptions_reference": "C:\\AdobeStockAutomation\\data\\descriptions.json"
   }
 }
 ```
 
-`FILE_02_METADATA_OPTIMIZER.md` reads this handoff block to know exactly which images to process and what trend context was used during creation.
+`02_IMAGE_UPSCALER.md` reads this handoff block to know which folder to process and passes its output to `03_METADATA_OPTIMIZER.md`.
 
 ---
 
 *FILE 01 END — TREND RESEARCH & IMAGE CREATION AUTOMATION*
-*Next: FILE_02_METADATA_OPTIMIZER.md — AI-powered title, keyword & category generation for Adobe Stock*
+*Next: 02_IMAGE_UPSCALER.md → 03_METADATA_OPTIMIZER.md*
