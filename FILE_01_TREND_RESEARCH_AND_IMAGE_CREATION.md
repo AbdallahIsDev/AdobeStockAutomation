@@ -886,113 +886,299 @@ ON EVERY SESSION START:
 
 ### Role
 
-Takes the scored trend data from Sub-Agent A and converts each trend into multiple precise, detailed, commercially optimized image descriptions ready to be entered into Google Flow AI as generation prompts.
+Takes the scored trend data from Sub-Agent A and converts each trend into a **series of 8 individually-crafted image descriptions**, each targeting a specific angle, composition, and framing. Every description is unique — no two descriptions in a series are alike. This directly implements the series strategy from `STOCK_SUCCESS_REPORT.md` Chapter 5.3, which produces the highest earnings-per-concept on Adobe Stock through the platform's "similar images" cross-promotion engine and multi-license buyer behaviour.
 
-### Description Generation Strategy
+---
 
-Each trend topic produces **2 image descriptions** (one for each aspect ratio batch: 16:9 and 1:1). These are NOT the same description — they are optimized for the visual composition of each ratio:
+### Why Series-Based Descriptions Beat Repeated Generations
 
-- **16:9 descriptions** → wide, landscape-oriented, scenes with environment/context (e.g., office scenes, outdoor environments, wide product shots)
-- **1:1 descriptions** → centered, portrait/square compositions (e.g., close-ups, portraits, product-focused, icon-style concepts)
+> From STOCK_SUCCESS_REPORT.md Chapter 5.3 — Recommended series structures:
+> - 1 wide 16:9 establishing shot + 1 close-up detail + 1 overhead/aerial + 1 portrait-orientation — covering all buyer crop needs
+> - Same concept, 3 different demographic groups — covering inclusive buyer requirements
+> - Same subject, 3 different moods (optimistic, focused, concerned) — covering editorial versatility
 
-### Description Quality Rules
+**Why this is worth the trade-off of one-by-one generation:**
+- Buyers who license one angle from a series license 2–5 more in the same session
+- Adobe's "similar images" engine cross-promotes all images in a series to every buyer who views any one of them — free additional impressions
+- Diverse angles cover ALL buyer format needs: website hero, social post, editorial, product mockup, print banner — one concept sells everywhere
+- Conservative estimate: **series approach increases per-concept earnings by 2–3×** compared to 4 identical generations of the same prompt
+- The speed cost is minimal — generation credits are consumed identically (8 × x1 = same as 2 × x4), only the click sequence is slightly different
+
+---
+
+### The 8-Description Series Structure Per Trend
+
+Each trend generates exactly **8 descriptions** — 4 optimized for 16:9 and 4 for 1:1. Each has a named **angle slot** that defines its composition identity:
+
+```
+TREND TOPIC: [e.g., "AI-Driven Financial Decision Making"]
+│
+├── 16:9 GROUP (landscape/widescreen — 4 individual descriptions)
+│   ├── Slot 16A — ESTABLISHING SHOT
+│   │   Wide scene, full environmental context, subject + setting together,
+│   │   multiple elements visible, cinematic composition. Best for: website
+│   │   hero images, banner ads, presentation backgrounds.
+│   │
+│   ├── Slot 16B — CLOSE-UP DETAIL
+│   │   Tight shot on a key element — hands, face, screen, object, texture.
+│   │   Shallow depth of field. Eliminates environment. Best for: editorial
+│   │   inserts, social media, product detail advertising.
+│   │
+│   ├── Slot 16C — OVERHEAD / AERIAL
+│   │   Bird's-eye top-down perspective of the scene or subject.
+│   │   Flat, graphic, pattern-rich. Best for: infographic backgrounds,
+│   │   lifestyle editorial, premium magazine layouts.
+│   │
+│   └── Slot 16D — MOOD / DEMOGRAPHIC VARIANT
+│       Same concept as 16A but with a different demographic group OR
+│       a distinctly different emotional tone (optimistic ↔ focused ↔ concerned).
+│       Covers inclusive buyer requirements. Best for: diversity-focused
+│       campaigns, HR platforms, healthcare, education brands.
+│
+└── 1:1 GROUP (square — 4 individual descriptions)
+    ├── Slot 1A — PORTRAIT / CENTERED
+    │   Subject centered in square frame, strong single focal point.
+    │   Clean background, subject fills 60-70% of frame. Best for:
+    │   Instagram posts, LinkedIn ads, app store graphics.
+    │
+    ├── Slot 1B — EXTREME CLOSE-UP / INTIMATE DETAIL
+    │   Face, hands, or a single symbolic object fills the square.
+    │   Maximum intimacy, high emotional impact. Best for: profile headers,
+    │   editorial thumbnails, emotional brand campaigns.
+    │
+    ├── Slot 1C — FLAT-LAY / TOP-DOWN LIFESTYLE
+    │   Overhead square composition of objects, lifestyle items, tools
+    │   relevant to the concept. Clean surface, styled arrangement.
+    │   Best for: lifestyle blogs, product pages, Instagram flat-lays.
+    │
+    └── Slot 1D — CULTURAL / DEMOGRAPHIC VARIANT
+        Same concept as 1A but with a different demographic, age group,
+        or cultural context. Ensures inclusive portfolio coverage.
+        Best for: global campaigns, multicultural advertising.
+```
+
+---
+
+### Description Quality Rules (unchanged, applied to every slot)
 
 Every description must:
 
-1. **Be 40–120 words** — long enough to be specific, short enough to stay coherent for the AI model
-2. **Lead with the visual subject** — what is in the center of the image
-3. **Include lighting direction** — "soft natural window light", "golden hour backlight", "clean studio lighting", "dramatic rim lighting"
-4. **Specify mood/emotion** — "confident and approachable", "calm and focused", "dynamic and energetic"
-5. **Include art direction notes** — "shallow depth of field", "sharp focus", "cinematic color grading", "clean minimal background"
-6. **Avoid brand names, logos, text overlays** — stock images must be brand-neutral
-7. **Avoid real people descriptions** — use "diverse professional woman in her 30s" not a real name
-8. **Include at least one commercial use signal** — "suitable for website hero image", "perfect for business presentation background"
-9. **Never include copyrighted characters, places with IP restrictions**
-10. **End with quality signal** — "photorealistic", "ultra-detailed", "high-resolution", "professional stock photography quality"
+1. **Be 40–120 words** — long enough to be specific, short enough to stay coherent
+2. **Lead with the composition type** — what angle and framing this image uses
+3. **Lead with the visual subject** — what is in the center of the image
+4. **Include lighting direction** — "soft natural window light", "golden hour backlight", "clean studio lighting", "dramatic rim lighting"
+5. **Specify mood/emotion** — "confident and approachable", "calm and focused", "dynamic and energetic"
+6. **Include art direction notes** — "shallow depth of field", "sharp focus", "cinematic color grading", "clean minimal background"
+7. **Avoid brand names, logos, text overlays** — stock images must be brand-neutral
+8. **Avoid real people descriptions** — use "diverse professional woman in her 30s" not a real name
+9. **Include at least one commercial use signal** — "suitable for website hero image", "perfect for business presentation background"
+10. **Never include copyrighted characters or IP-restricted locations**
+11. **End with quality signal** — "photorealistic", "ultra-detailed", "professional stock photography quality"
 
-### Description Templates by Category
+---
 
-**Technology / AI / Business:**
+### Description Templates by Angle Slot
 
+**Slot 16A — Establishing Shot (16:9):**
 ```
-Template: [Subject doing action] in [environment], [lighting], [mood], [camera style], [composition], photorealistic professional stock photography, suitable for [commercial use case], ultra-detailed, [color palette].
-```
-
-**Lifestyle / Wellness / Healthcare:**
-
-```
-Template: [Diverse person/people] [activity] in [setting], [natural/studio lighting], authentic expression of [emotion], [depth of field], clean background, professional stock image quality, ideal for [commercial use].
-```
-
-**Nature / Sustainability / Environment:**
-
-```
-Template: [Natural element/scene] with [modern sustainable element], [time of day], [color mood], wide angle, cinematic composition, photorealistic, suitable for [environmental brand/campaign use].
+[Wide scene] showing [subject + multiple contextual elements] in [full environment],
+[lighting direction], [mood], shallow depth of field pulling focus to [primary subject],
+wide cinematic composition, [color palette], photorealistic professional stock,
+suitable for [website hero / banner ad / presentation background].
 ```
 
-**Abstract / Conceptual:**
-
+**Slot 16B — Close-Up Detail (16:9):**
 ```
-Template: Abstract [concept] visualized as [visual metaphor], [color palette], [lighting], [texture/material], minimal clean composition, suitable for [commercial/editorial use], professional stock quality.
+Tight close-up of [specific element — hands/screen/face/object] belonging to
+[subject context], [macro/shallow DOF details], [texture/material description],
+[lighting], [mood conveyed by the detail alone], horizontal format,
+professional stock photography, ideal for [editorial insert / social ad].
 ```
 
-### Example Descriptions Generated from Trend Data
+**Slot 16C — Overhead / Aerial (16:9):**
+```
+Bird's-eye overhead view of [subject/scene from above], [flat graphic elements visible],
+[color-coordinated arrangement], [lighting — soft diffused or natural daylight],
+top-down perspective, clean [surface/background], pattern-rich composition,
+photorealistic, professional stock, perfect for [infographic background / magazine layout].
+```
 
-**Trend: "AI-Powered Productivity"**
+**Slot 16D — Mood / Demographic Variant (16:9):**
+```
+[Same scene as 16A but with different demographic: e.g., "older South Asian man" /
+different mood: e.g., "visibly concerned expression" / different cultural context],
+[environment matching the concept], [lighting], [mood/expression that differs from 16A],
+wide scene composition, photorealistic professional stock photography,
+suitable for [inclusive advertising / editorial / HR campaigns].
+```
 
-*16:9 description:*
+**Slot 1A — Portrait / Centered (1:1):**
+```
+Centered portrait of [subject] in [setting], subject fills most of the square frame,
+[lighting — studio or environmental], [authentic expression/mood],
+clean blurred background, square composition, sharp focus on subject,
+photorealistic professional stock, ideal for [Instagram ad / LinkedIn / app icon].
+```
 
-> A focused diverse professional woman in her early 30s working at a sleek minimalist desk, holographic AI data visualizations floating above her laptop in a bright modern co-working space, soft natural window light from the left, shallow depth of field, confident calm expression, clean Scandinavian interior design, muted blue and white color palette, cinematic color grading, professional stock photography quality, ideal for technology company websites and productivity app advertisements.
+**Slot 1B — Extreme Close-Up / Intimate Detail (1:1):**
+```
+Extreme close-up of [face / hands / single symbolic object] related to [concept],
+[texture details], [lighting that emphasizes texture/emotion],
+fills entire square frame, shallow depth of field, intimate emotional impact,
+professional stock photography, suitable for [profile header / emotional brand campaign].
+```
 
-*1:1 description:*
+**Slot 1C — Flat-Lay / Top-Down Lifestyle (1:1):**
+```
+Overhead flat-lay of [lifestyle objects related to concept] arranged on [clean surface],
+[color-coordinated items], [natural diffused lighting from above],
+top-down square composition, styled minimal arrangement, ultra-sharp detail,
+professional stock photography quality, perfect for [lifestyle blog / product page / social media].
+```
 
-> Close-up portrait of a confident young White male professional in a modern office setting, a subtle glowing AI interface reflection visible in his glasses, soft studio lighting, sharp focus on face, authentic engaged expression, clean blurred background, photorealistic, professional business stock photography, perfect for technology brand campaigns and LinkedIn advertising.
+**Slot 1D — Cultural / Demographic Variant (1:1):**
+```
+Centered portrait of [different demographic: e.g., "elderly East Asian woman" /
+"teenage mixed-race student" / "Middle Eastern professional in traditional dress"],
+[same core concept as 1A but visually distinct demographic/cultural representation],
+[setting], [lighting], authentic expression, square format,
+photorealistic professional stock, suitable for [global multicultural campaigns].
+```
 
-**Trend: "Mental Health & Mindfulness"**
+---
 
-*16:9 description:*
+### Full Example — Trend: "AI-Driven Financial Decision Making"
 
-> A serene young woman practicing mindfulness meditation on a light wood floor in a sunlit minimal apartment, golden morning light streaming through sheer curtains, eyes gently closed, peaceful authentic expression, yoga mat, green plant in background, warm neutral tones, shallow depth of field, photorealistic lifestyle photography, ideal for wellness app websites and mental health awareness campaigns.
+**16A — Establishing Shot (16:9):**
+> Wide shot of a modern trading floor transformed by AI — diverse team of financial professionals in their 30s–40s reviewing holographic data visualizations floating above curved monitor arrays, soft cool-blue overhead lighting, confident focused expressions, dynamic workplace energy, cinematic color grading with blue and gold tones, photorealistic professional stock photography, ideal for fintech company website hero images and banking app advertisements.
 
-*1:1 description:*
+**16B — Close-Up Detail (16:9):**
+> Extreme close-up of a professional's hands typing on a keyboard with transparent financial data — stock charts, AI analytics graphs, percentage indicators — reflecting across their fingertips and the glass surface, shallow depth of field, dramatic blue rim lighting, horizontal format, ultra-sharp focus on the hands and data, photorealistic professional stock, ideal for technology editorial and financial services advertising.
 
-> Overhead flat lay of a wellness morning routine setup: ceramic mug of tea, open journal, small succulent plant, smooth river stones, lavender sprig, natural linen texture background, soft diffused studio lighting, warm earthy tones, ultra-sharp detail, clean minimal composition, professional stock photography quality, suitable for wellness brands, health blogs, and lifestyle product advertising.
+**16C — Overhead / Aerial (16:9):**
+> Bird's-eye overhead view of a finance professional's clean minimalist desk — laptop showing AI dashboard, printed charts, a coffee cup, smartphone, notepad, and pen arranged in a purposeful composition on a white marble surface, natural diffused window light, muted blue-grey and warm gold accent tones, flat graphic layout, photorealistic professional stock photography, perfect for business blog header and fintech infographic backgrounds.
+
+**16D — Mood Variant (16:9):**
+> Wide shot of a middle-aged South Asian woman financial analyst studying AI-generated market projections on a large curved screen in a dimly lit home office, visibly tense and concerned expression, dramatic side lighting with cool blue tones, shallow depth of field on her face against the glowing screen, authentic emotional moment, photorealistic professional stock photography, suitable for editorial journalism and economic uncertainty campaign visuals.
+
+**1A — Portrait / Centered (1:1):**
+> Centered portrait of a confident young Black male investment banker in a sharp navy suit, smartphone showing AI financial app in hand, modern glass office background softly blurred, clean studio lighting, composed and assured expression, subject fills square frame, sharp focus on face and phone screen, photorealistic professional stock, ideal for LinkedIn advertising and financial services mobile app graphics.
+
+**1B — Extreme Close-Up (1:1):**
+> Extreme close-up of a human eye reflecting a glowing AI stock market interface — green line charts and data streams visible in the iris, macro detail, dramatic dark background, single focused catch-light, fills entire square frame, ultra-sharp with cinematic contrast, symbolic and conceptual, professional stock photography quality, perfect for technology brand campaigns and AI editorial thumbnails.
+
+**1C — Flat-Lay (1:1):**
+> Overhead flat-lay of financial planning tools: open laptop showing AI analytics dashboard, leather wallet, gold pen, printed bar charts, smartphone with trading app, small potted cactus on a clean white marble surface, soft natural window light, warm gold and cool grey color palette, square composition, ultra-sharp detail, professional stock photography, ideal for personal finance blogs and wealth management platform product pages.
+
+**1D — Cultural Variant (1:1):**
+> Centered portrait of an elderly Japanese woman financial advisor in professional attire reviewing AI-generated investment reports on a tablet, warm natural office lighting, calm and knowledgeable expression, silver hair, traditional detail in background, square composition, photorealistic professional stock photography, suitable for multicultural financial advertising and global wealth management campaigns.
+
+---
 
 ### Output Format: `descriptions.json`
 
 ```json
 {
   "generated_at": "YYYY-MM-DDTHH:MM:SSZ",
-  "total_descriptions": "[dynamic — 2 per trend, varies by session]",
+  "total_descriptions": "[dynamic — 8 per trend × number of trends]",
   "loop_index": 0,
+  "descriptions_per_trend": 8,
+  "series_structure": {
+    "16:9_slots": ["16A_establishing", "16B_close_up", "16C_overhead", "16D_mood_variant"],
+    "1:1_slots": ["1A_portrait", "1B_extreme_close_up", "1C_flatlay", "1D_demographic_variant"]
+  },
   "descriptions": [
     {
       "id": 1,
       "trend_id": 1,
-      "trend_topic": "AI-Powered Productivity",
-      "aspect_ratio_target": "16:9",
-      "prompt_text": "A focused diverse professional woman...",
-      "expected_images": 4,
-      "commercial_tags": ["technology", "business", "AI", "productivity"],
+      "trend_topic": "AI-Driven Financial Decision Making",
+      "series_slot": "16A_establishing",
+      "aspect_ratio": "16:9",
+      "quantity": 1,
+      "prompt_text": "Wide shot of a modern trading floor transformed by AI...",
+      "commercial_tags": ["fintech", "AI", "finance", "diverse"],
       "status": "pending"
     },
     {
       "id": 2,
       "trend_id": 1,
-      "trend_topic": "AI-Powered Productivity",
-      "aspect_ratio_target": "1:1",
-      "prompt_text": "Close-up portrait of a confident young...",
-      "expected_images": 4,
-      "commercial_tags": ["technology", "portrait", "professional", "AI"],
+      "trend_topic": "AI-Driven Financial Decision Making",
+      "series_slot": "16B_close_up",
+      "aspect_ratio": "16:9",
+      "quantity": 1,
+      "prompt_text": "Extreme close-up of a professional's hands typing...",
+      "commercial_tags": ["technology", "finance", "detail", "hands"],
+      "status": "pending"
+    },
+    {
+      "id": 3,
+      "trend_id": 1,
+      "series_slot": "16C_overhead",
+      "aspect_ratio": "16:9",
+      "quantity": 1,
+      "prompt_text": "Bird's-eye overhead view of a finance professional's desk...",
+      "commercial_tags": ["flatlay", "finance", "overhead", "workspace"],
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "trend_id": 1,
+      "series_slot": "16D_mood_variant",
+      "aspect_ratio": "16:9",
+      "quantity": 1,
+      "prompt_text": "Wide shot of a middle-aged South Asian woman financial analyst...",
+      "commercial_tags": ["diverse", "editorial", "emotion", "finance"],
+      "status": "pending"
+    },
+    {
+      "id": 5,
+      "trend_id": 1,
+      "series_slot": "1A_portrait",
+      "aspect_ratio": "1:1",
+      "quantity": 1,
+      "prompt_text": "Centered portrait of a confident young Black male investment banker...",
+      "commercial_tags": ["portrait", "diverse", "finance", "professional"],
+      "status": "pending"
+    },
+    {
+      "id": 6,
+      "trend_id": 1,
+      "series_slot": "1B_extreme_close_up",
+      "aspect_ratio": "1:1",
+      "quantity": 1,
+      "prompt_text": "Extreme close-up of a human eye reflecting a glowing AI stock market interface...",
+      "commercial_tags": ["conceptual", "AI", "editorial", "technology"],
+      "status": "pending"
+    },
+    {
+      "id": 7,
+      "trend_id": 1,
+      "series_slot": "1C_flatlay",
+      "aspect_ratio": "1:1",
+      "quantity": 1,
+      "prompt_text": "Overhead flat-lay of financial planning tools...",
+      "commercial_tags": ["flatlay", "lifestyle", "finance", "overhead"],
+      "status": "pending"
+    },
+    {
+      "id": 8,
+      "trend_id": 1,
+      "series_slot": "1D_demographic_variant",
+      "aspect_ratio": "1:1",
+      "quantity": 1,
+      "prompt_text": "Centered portrait of an elderly Japanese woman financial advisor...",
+      "commercial_tags": ["diverse", "multicultural", "portrait", "finance"],
       "status": "pending"
     }
   ]
 }
 ```
 
+---
+
 **Continuous Loop Strategy:**
 
-Descriptions are not a fixed quota. Sub-Agent B produces 2 descriptions per trend × however many trends were identified. Once Sub-Agent C finishes generating images for ALL descriptions in the current queue, it does **not** stop — it loops back to the first trend and repeats the entire process from the beginning, cycling through all descriptions again. This loop continues indefinitely until all account credits across all accounts are exhausted. There is no fixed image count per session — the system runs for as long as there is credit available. New accounts added to `accounts.json` are automatically picked up in future sessions, extending the loop capacity without any code changes.
+Descriptions are not a fixed quota. Sub-Agent B produces 8 descriptions per trend. Once Sub-Agent C finishes the create→download cycle for ALL descriptions in the current queue, it loops back to the first trend and repeats the entire process. This loop continues indefinitely until all account credits across all accounts are exhausted. New accounts added to `accounts.json` are automatically picked up, extending the loop capacity without any code changes.
 
 ---
 
@@ -1220,15 +1406,20 @@ After clicking aspect ratio button:
 - If verification fails → retry click → re-verify → max 3 retries
 ```
 
-#### D. Set Quantity to x4
+#### D. Set Quantity to x1
 
 ```
 QUANTITY BUTTONS (visible in settings panel):
 - Row: [x1] [x2] [x3] [x4]
-- Target: x4 (always)
-- If x4 is already selected → no action
-- If not → click x4 button
-- Verify: x4 has active/selected state
+- Target: x1 (always — one image per description, each with a unique angle)
+- If x1 is already selected → no action
+- If set to any other quantity → click x1 button
+- Verify: x1 has active/selected state
+
+REASON: Each description in the series is specifically crafted for a unique
+angle slot (establishing, close-up, overhead, variant). Generating x4 from
+one description defeats this — all 4 would be random variations of the same
+angle. x1 ensures each generation is intentional and purpose-built.
 ```
 
 #### E. Select AI Model
@@ -1278,106 +1469,245 @@ else:
 
 ---
 
-### 4.3 — IMAGE CREATION LOOP
+### 4.3 — IMAGE CREATION & DOWNLOAD CYCLE (Series-Based)
 
-#### Overview of Full Loop Per Description
-
-```
-For each description in descriptions.json (status == "pending"):
-
-  PHASE A — Create 16:9 batch (4 images)
-  ├─ Enter description in prompt input
-  ├─ Open settings → set aspect ratio to 16:9 → set x4 → set model → close settings
-  ├─ Click generate button (arrow button)
-  ├─ DO NOT WAIT for completion
-  └─ Immediately proceed to PHASE B
-
-  PHASE B — Create 1:1 batch (4 images) with SAME description
-  ├─ Open settings → change aspect ratio to 1:1 → (x4 and model remain same) → close settings
-  ├─ Click generate button (arrow button)
-  ├─ DO NOT WAIT for completion
-  └─ Move to next description → repeat from PHASE A
-
-  Result: 8 images created per description (4 × 16:9, 4 × 1:1)
-```
-
-#### PHASE A — Enter Description & Create 16:9 Batch
+#### Overview — The Create→Download Loop
 
 ```
-STEP 1: Locate prompt input box
-- Find the text input/textarea in the bottom of the Flow interface
-- It is the main prompt text area where users type image descriptions
+The fundamental unit of work is ONE SERIES = 8 images for ONE TREND.
+The flow for every series:
 
-STEP 2: Clear any existing text
-- Click input to focus
-- Select all (Ctrl+A) → Delete
+  ┌────────────────────────────────────────────────────────────┐
+  │  SERIES CYCLE (repeated for every trend, loops infinitely) │
+  └────────────────────────────────────────────────────────────┘
+         │
+         ▼
+  PHASE 1 — Generate 16:9 group (4 images, one by one)
+  ├─ [16A] Enter establishing shot description → Set 16:9 + x1 → Generate → Wait 1s
+  ├─ [16B] Enter close-up detail description  → Set 16:9 + x1 → Generate → Wait 1s
+  ├─ [16C] Enter overhead description         → Set 16:9 + x1 → Generate → Wait 1s
+  └─ [16D] Enter mood/variant description     → Set 16:9 + x1 → Generate → Wait 1s
+         │
+         ▼
+  PHASE 2 — Generate 1:1 group (4 images, one by one)
+  ├─ [1A]  Enter portrait description         → Set 1:1 + x1 → Generate → Wait 1s
+  ├─ [1B]  Enter extreme close-up description → Set 1:1 + x1 → Generate → Wait 1s
+  ├─ [1C]  Enter flat-lay description         → Set 1:1 + x1 → Generate → Wait 1s
+  └─ [1D]  Enter demographic variant desc.    → Set 1:1 + x1 → Generate → Wait 1s
+         │
+         ▼
+  WAIT — Poll gallery until all 8 images for this series are fully rendered
+  (thumbnails visible and not spinning) — poll every 10 seconds, max wait 5 min
+         │
+         ▼
+  PHASE 3 — Download this series (8 images, parallel upscaling)
+  ├─ Right-click image 1 → 2K upscaled → Wait 1s → next
+  ├─ Right-click image 2 → 2K upscaled → Wait 1s → next
+  ├─ ... (repeat for all 8)
+  └─ All 8 upscale concurrently on server → files auto-download
+         │
+         ▼
+  ✓ Series complete — move to NEXT TREND → repeat from PHASE 1
+  (Loop infinitely through all trends until rate limit or all accounts exhausted)
+```
 
-STEP 3: Type description
-- Type or paste the prompt text from descriptions.json[current_index].prompt_text
-- Verify: input field contains the typed text
+**Why create→download per series (not globally at the end):**
+- Every image is accounted for immediately after creation — zero missed images
+- If a rate limit hits mid-session, everything generated so far is already downloaded
+- Account switches are clean — download first, then switch, then continue
+- No dependency on remembering which images were created across the entire session
 
-STEP 4: Configure settings for 16:9
-- Open settings panel (click settings button)
-- Wait for panel DOM
-- Verify/set: Image tab active
-- Set aspect ratio: 16:9
-- Set quantity: x4
-- Set model: [current model from state]
+---
+
+#### PHASE 1 — Generate 16:9 Group (4 Descriptions, One by One)
+
+For each of the 4 × 16:9 descriptions in the current trend series:
+
+```
+STEP 1: Clear and enter the description
+- Click the prompt input to focus
+- Select all (Ctrl+A) → Delete any existing text
+- Type or paste the prompt text for the current series slot
+  (e.g., for slot 16A: the establishing shot description)
+- Verify: input contains the correct text
+
+STEP 2: Open settings panel
+- Click the settings trigger button in the prompt toolbar
+- Wait for settings panel DOM to appear
+
+STEP 3: Verify/set all three settings
+  a. OUTPUT TYPE: Verify Image tab is selected. If not → click Image tab.
+  b. ASPECT RATIO: Click "16:9" button → verify it is selected
+  c. QUANTITY: Click "x1" button → verify it is selected
+  d. MODEL: Verify correct model shown (Nano Banana 2 or current priority model)
+     If wrong → click model selector → choose correct model → wait for dropdown close
 - Close settings panel
 
-STEP 5: Click Generate (Arrow button)
-- Locate the arrow/send button (→ icon) adjacent to the prompt input
-- Click it
-- Verify: generation has started (a progress indicator / loading state appears)
-- DO NOT wait for images to finish
-- Immediately proceed to PHASE B
+STEP 4: Click Generate (Arrow button)
+- Click the generate/send button
+- Verify: generation job started (progress indicator appears in gallery)
+- Wait 1 second (UI registration pause)
+- DO NOT wait for image to finish rendering
+
+STEP 5: Move to next slot in 16:9 group
+- Increment slot index: 16A → 16B → 16C → 16D
+- Repeat Steps 1–4 for the next description
+- After 16D is submitted → proceed to PHASE 2 (1:1 group)
 ```
 
-#### PHASE B — Change Aspect Ratio to 1:1 & Create Second Batch
+**Settings efficiency note:**
+```
+After the first generation in a series, settings only need to change if:
+- Aspect ratio changes (16:9 → 1:1 at the PHASE 1→2 boundary only)
+- Model changes (on rate limit event only)
+- Quantity somehow got reset (verify only, not change)
+
+Within PHASE 1: aspect ratio stays 16:9, quantity stays x1, model stays same.
+Open settings only to verify or change — do NOT open unnecessarily.
+Between 16B and 16C (same ratio, same quantity): only update the description text,
+then click generate. Settings re-open only needed if anything needs to change.
+```
+
+---
+
+#### PHASE 2 — Generate 1:1 Group (4 Descriptions, One by One)
+
+Same process as PHASE 1, but switching aspect ratio to 1:1 at the start:
 
 ```
-STEP 1: Open settings panel again
-- Click settings trigger button
+STEP 1 (first 1:1 image only): Open settings → change aspect ratio to 1:1 → close
+STEP 1 (images 2, 3, 4): Skip opening settings — ratio already set to 1:1
 
-STEP 2: Change aspect ratio ONLY
-- Click "1:1" aspect ratio button
-- Verify: 1:1 is now selected
-- NOTE: x4 and model remain unchanged — only aspect ratio changes
+For each of the 4 × 1:1 descriptions (1A → 1B → 1C → 1D):
 
-STEP 3: Close settings panel
+  → Clear prompt input
+  → Enter the slot-specific description
+  → (Open settings only if ratio or model changed — otherwise skip)
+  → Click Generate
+  → Wait 1 second
+  → Move to next slot
 
-STEP 4: Click Generate (Arrow button) again
-- The prompt input still contains the same description from PHASE A
-- Click generate button
-- Verify: second generation has started
-- Wait 1 second (allow the UI to register the generation job before proceeding)
-- DO NOT wait for generation to complete — proceed immediately after the 1s pause
-
-STEP 5: Update state
-- Mark current description as "batches_sent" in session_state.json
-
-STEP 6: Move to next description OR loop back
-- Increment current_description_index in state
-- If more descriptions remain in current loop pass → go back to PHASE A with new description
-- If ALL descriptions in the queue have been sent (end of current loop pass):
-    → DO NOT stop
-    → Increment loop_index counter in session_state.json
-    → Log: "Loop [N] complete. All descriptions cycled. Starting loop [N+1]."
-    → Reset current_description_index to 0
-    → Go back to PHASE A with the FIRST description again (loop restart)
-    → Continue until a rate limit is hit → trigger rate limit handler
-    → Only stop when ALL accounts across ALL models are fully exhausted
+After slot 1D is submitted → proceed to WAIT PHASE
 ```
+
+---
+
+#### WAIT PHASE — Wait for All 8 Images to Render
+
+```
+After all 8 generation jobs are submitted for this trend series:
+
+POLL STRATEGY:
+- Poll the project gallery every 10 seconds
+- For each of the 8 generation jobs tracked in session_state:
+  check if a rendered thumbnail (non-spinning) has appeared
+- Count how many of the 8 are fully rendered
+- Continue polling until:
+  a. All 8 thumbnails are fully rendered → proceed to PHASE 3 (download)
+  b. Timeout: 5 minutes elapsed → proceed to PHASE 3 with however many rendered
+
+TRACKING:
+- session_state.current_series_submitted = [list of 8 generation job IDs or positions]
+- session_state.current_series_rendered = [list of rendered thumbnails]
+- Match rendered thumbnails to submitted jobs by position in gallery (newest first)
+
+TIMEOUT BEHAVIOR:
+- If after 5 minutes fewer than 8 images have rendered:
+  → Download whatever has rendered
+  → Log: "Timeout: [N] of 8 images rendered for trend [topic]. Downloading [N]."
+  → Mark unrendered slots as "generation_failed" in session_state
+  → Continue to next trend (do not retry failed generations in current session)
+```
+
+---
+
+#### PHASE 3 — Download This Series (8 Images, Parallel Upscaling)
+
+```
+After all rendered images for this series are identified:
+
+FOR EACH rendered image in the series (right-click method):
+
+  STEP 1: Hover over the image thumbnail → wait 500ms for hover menu DOM
+  STEP 2: Right-click the image → wait for context menu modal
+  STEP 3: Hover over "Download" → wait 300ms for sub-menu
+  STEP 4: Click "2K upscaled"
+  STEP 5: Wait 1 second (UI registration)
+  STEP 6: Mark image as "upscale_requested" in session_state
+  STEP 7: Move to the NEXT image immediately — do NOT wait for upscale to finish
+
+All 8 upscale jobs run in parallel on Google's servers.
+Files auto-download to system downloads folder as each completes.
+
+BACKGROUND FILE WATCHER (runs continuously during session):
+  → Monitors the system downloads folder
+  → When a new file appears:
+      a. Rename using structured convention:
+         [trend_topic]_[series_slot]_[loop_index]_[timestamp].png
+         Example: ai_finance_16A_establishing_L1_001_20260323.png
+      b. Move to: C:\AdobeStockAutomation\downloads\[session_date]\
+      c. Update session_state.downloaded_images list
+      d. Increment images_downloaded_count
+      e. Log: "Downloaded: [filename]"
+
+SERIES DOWNLOAD COMPLETE SIGNAL:
+  → All 8 images for this series confirmed in downloaded_images list
+  → OR: 60 seconds have passed since last upscale request with no more pending
+  → Log: "Series [trend_topic] complete. [N] images downloaded."
+  → Proceed to next trend → begin next series PHASE 1
+```
+
+---
+
+#### Rate Limit During Generation — Download First, Then Switch
+
+```
+IF a rate limit error is detected at ANY point during PHASE 1 or PHASE 2:
+
+  STEP 1: STOP submitting new generation jobs immediately
+  STEP 2: LOG: "Rate limit hit after [N] of 8 images submitted for [trend_topic]."
+
+  STEP 3: WAIT for any already-submitted jobs to finish rendering
+          → Poll gallery for up to 3 minutes for pending renders
+          → Collect all rendered thumbnails
+
+  STEP 4: DOWNLOAD all rendered images for the current partial series
+          → Run PHASE 3 download process on whatever rendered
+          → DO NOT skip this step — download everything before switching
+
+  STEP 5: Update session_state:
+          → Mark which slots were submitted (status: "batches_sent")
+          → Mark which slots are missing (status: "pending" — will retry in next loop)
+          → Record partial_series_downloaded = true
+
+  STEP 6: Determine rate limit type and switch:
+          → If Nano Banana 2 exhausted → switch to Nano Banana Pro → resume
+          → If both models exhausted → switch account → reset model to Nano Banana 2
+          → If all accounts exhausted → proceed to session complete
+
+  STEP 7: After switching — resume from the NEXT incomplete series
+          (The partially completed series will be retried in the next loop pass)
+```
+
+---
 
 #### Critical Timing Rules
 
 ```
-NEVER wait for image generation to complete before sending next batch.
-Google Flow generates asynchronously — multiple jobs can run in parallel.
-The goal is to QUEUE all generation jobs as fast as possible, then download all results.
+Generation:
+  → 1 second wait after each Generate click (UI registration)
+  → No other waiting between generations within a series
+  → Settings panel only opened when something needs to change
 
-EXCEPTION: If the interface becomes unresponsive or shows an error modal,
-wait 3 seconds and check state before proceeding.
+Download:
+  → 1 second wait after each 2K upscaled click (UI registration)
+  → Never wait for one upscale to finish before clicking the next
+  → All upscales run in parallel on the server
+
+Between series:
+  → No fixed delay — proceed to next series as soon as PHASE 3 download
+    requests are all submitted (background watcher handles file arrival)
+  → The 1s gaps between download clicks effectively pace the transition
 ```
 
 ---
@@ -1580,8 +1910,16 @@ All selectors must be discovered dynamically at first run and saved to `selector
       "fallback_text_match": "1:1",
       "interaction": "click to select"
     },
+    "quantity_x1": {
+      "description": "x1 quantity button — generates 1 image per prompt (current default for series-based generation)",
+      "trigger_required": true,
+      "trigger_action": "open settings panel",
+      "selector": "[DISCOVERED_AFTER_TRIGGER]",
+      "fallback_text_match": "x1",
+      "interaction": "click to select"
+    },
     "quantity_x4": {
-      "description": "x4 quantity button (generate 4 images)",
+      "description": "x4 quantity button — kept in registry for reference; NOT used in series mode",
       "trigger_required": true,
       "trigger_action": "open settings panel",
       "selector": "[DISCOVERED_AFTER_TRIGGER]",
@@ -1742,115 +2080,42 @@ When extracting selectors, prefer in this order:
 
 ### 4.7 — IMAGE DOWNLOAD PHASE
 
-After all generation jobs have been queued, wait for images to appear in the project gallery, then download each one at 2K upscaled resolution.
+> The download phase is now fully integrated into the series creation cycle in **Section 4.3 — PHASE 3**. Download happens immediately after each 8-image series is generated — not at the end of the session.
+>
+> This ensures zero missed images regardless of when a rate limit hits or an account switch occurs.
 
-#### Detecting When Images Are Ready
-
-```
-MONITORING STRATEGY:
-- The download phase runs CONCURRENTLY with the generation loop — do not wait
-  for all generation jobs to finish before starting downloads
-- Poll the project gallery every 15 seconds for newly rendered image thumbnails
-- An image is "ready" when:
-  a. Its thumbnail is fully rendered (not a spinner/placeholder)
-  b. It has not yet been processed (not in session_state.downloaded_images list)
-- There is NO fixed expected count — the gallery grows continuously as long as
-  generation jobs are running and accounts have credit
-- Continue polling indefinitely until:
-  a. The generation loop has fully stopped (all accounts exhausted), AND
-  b. All remaining rendered thumbnails have been downloaded
-```
-
-#### Download Loop: For Each Ready Image
+#### Download Behavior Summary
 
 ```
-METHOD: Right-click context menu (fastest and most reliable)
+WHEN: Immediately after all 8 images in a series have rendered (or timeout)
+HOW:  Right-click each image → 2K upscaled → Wait 1s → next image
+      All upscale jobs run in parallel on server
+      Files auto-download as each completes
+      Background watcher renames + moves files to output folder
 
-STEP 1: Identify new, undownloaded images in gallery
-- Compare gallery thumbnails against session_state.downloaded_images list
-- Process images in order from newest to oldest (or any consistent order)
+RATE LIMIT INTERRUPT:
+  If limit hits mid-series → wait for renders → download partial series
+  → THEN switch model/account → never skip the download step
 
-STEP 2: Hover over target image
-- Move cursor to center of image thumbnail
-- Wait: hover action menu elements appear in DOM (500ms)
-
-STEP 3: Right-click image
-- Right-click the image thumbnail
-- Wait: context menu modal appears in DOM
-
-STEP 4: Hover over "Download"
-- Move cursor to the "Download" option in the context menu
-- Wait: sub-menu appears with download quality options (300ms)
-
-STEP 5: Click "2K upscaled"
-- Click on "2K upscaled" option in sub-menu
-- Observe: UI shows upscaling progress/indicator on that image
-- Wait 1 second (allows the UI to register the request before moving on)
-- DO NOT wait for upscaling to complete
-- Mark the image as "upscale_requested" in session_state immediately
-- Move directly to the NEXT undownloaded image and repeat Steps 2–5
-
-STEP 6: Parallel upscaling (all images upscale simultaneously)
-- Multiple 2K upscale jobs run in parallel on Google's servers — this is normal
-- Once an upscale job finishes, the file downloads automatically to the
-  system downloads folder (no further action needed per image)
-- There is no error risk from parallel upscaling — the server handles concurrency
-
-STEP 7: Monitor downloads folder passively
-- While new upscale requests are being submitted for remaining images,
-  a background watcher monitors the system downloads folder
-- When a new file appears: rename it using the structured naming convention:
-  Format: [trend_topic]_[aspect_ratio]_[loop_index]_[index]_[timestamp].png
-  Example: ai_productivity_16x9_L2_001_20260323.png
-- Move renamed file to: C:\AdobeStockAutomation\downloads\[session_date]\
-
-STEP 8: Update state per confirmed download
-- Add image to session_state.images_downloaded list
-- Increment images_downloaded_count
-- Log: "Downloaded: [filename]"
-
-STEP 9: Continue submitting upscale requests for all remaining ready images
-- Do not pause between images while waiting for any prior upscale to finish
-- The goal: submit all 2K upscale requests as fast as possible, let them
-  all process in parallel, collect downloads as they arrive automatically
-```
-
-#### Download Concurrency Strategy
-
-```
-PARALLEL UPSCALING with a 1-second pace gap between requests.
-
-Submit 2K upscale requests back-to-back with a 1-second wait between each one.
-This gives the UI just enough time to register each request before the next click,
-preventing missed interactions on fast machines while still running all upscales
-in parallel on the server side.
-
-Correct behavior:
-  Image 1 → right-click → 2K upscaled → Wait 1 second → next image
-  Image 2 → right-click → 2K upscaled → Wait 1 second → next image
-  Image 3 → right-click → 2K upscaled → Wait 1 second → next image
-  ... (all images submitted with a 1s gap between each)
-  Downloads arrive in the background as each upscale completes on the server
-
-Incorrect behavior (do NOT do this):
-  ✗ Click 2K upscaled on Image 1 → wait for download to complete → then click Image 2
-  ✗ Waiting more than 1–2 seconds between upscale requests
-  ✗ Checking upscale progress or download status before moving to next image
+SESSION END CLEANUP:
+  After the infinite loop stops (all accounts exhausted):
+  → Scan gallery one final time for any missed undownloaded images
+  → Submit 2K upscale for any found → wait for downloads
+  → Once gallery has no new undownloaded images → session complete
 ```
 
 #### Download Verification
 
 ```
-Since the session runs as a continuous loop with no fixed image target:
-1. After the generation loop fully stops (all accounts exhausted):
-   - Continue polling the gallery for any remaining ready-but-not-yet-downloaded images
-   - Submit 2K upscale requests for any missed images
-   - Wait for all pending downloads to arrive (monitor downloads folder)
-2. Once no new images appear in the gallery for 2 consecutive poll cycles (30s):
-   - Consider the download phase complete
-3. Log final summary:
-   "Session complete. [N] images downloaded to [output_folder]. [N] loop passes completed."
-4. Write final counts to session_state.json and automation_log.txt
+Per-series verification (after PHASE 3):
+- Compare session_state.current_series_rendered vs current_series_downloaded
+- If any gap → log + retry download for missed images
+- Log: "Series [topic] downloaded: [N]/8 images."
+
+Session-end verification:
+- Final gallery scan confirms no undownloaded images remain
+- Log: "Session complete. [N] total images downloaded. [N] series completed."
+- Write final counts to session_state.json and automation_log.txt
 ```
 
 ---
@@ -1923,12 +2188,12 @@ Output: trend_data.json
      ▼
 SUB-AGENT B: Description Generator
 ─────────────────────────────────────
-For each trend:
-  → Create 16:9 optimized description
-  → Create 1:1 optimized description
+For each trend → generate 8 angle-specific descriptions:
+  16:9: [16A establishing] [16B close-up] [16C overhead] [16D mood variant]
+  1:1:  [1A portrait] [1B extreme close-up] [1C flat-lay] [1D demographic variant]
      │
      ▼
-Output: descriptions.json (2 per trend, no fixed total)
+Output: descriptions.json (8 per trend, no fixed total)
      │
      ▼
 SUB-AGENT C: Image Creation Agent
@@ -1952,49 +2217,49 @@ NAVIGATE:
 SETTINGS VERIFICATION:
   → Open settings panel
   → Ensure Image tab is selected (not Video)
-  → Ensure x4 quantity is selected
+  → Ensure x1 quantity is selected
   → Ensure correct model is selected (Nano Banana 2 by default)
   → Close settings panel
      │
      ▼
-╔══════════════════════════════════════════════════════╗
-║         INFINITE GENERATION LOOP                     ║
-║  Runs until ALL accounts + ALL models are exhausted  ║
-╚══════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════╗
+║  INFINITE SERIES LOOP (create→download per trend, no end count)  ║
+║  Runs until ALL accounts + ALL models are exhausted              ║
+╚══════════════════════════════════════════════════════════════════╝
      │
      ▼
 loop_index = 0
-current_description_index = 0
+current_trend_index = 0
      │
      ▼
-FOR EACH description (cycling — restarts from 0 when all done):
+FOR EACH trend (cycling — restarts from 0 when all trends done):
   │
-  ├─ PHASE A: Enter description
-  │           Open settings → set 16:9 → verify x4 + model → close
-  │           Click Generate → DO NOT WAIT → proceed immediately
+  ├─ PHASE 1 — 16:9 group (4 descriptions, one by one, x1 each):
+  │   [16A] Enter establishing shot desc → 16:9 + x1 → Generate → Wait 1s
+  │   [16B] Enter close-up detail desc   → 16:9 + x1 → Generate → Wait 1s
+  │   [16C] Enter overhead desc          → 16:9 + x1 → Generate → Wait 1s
+  │   [16D] Enter mood/variant desc      → 16:9 + x1 → Generate → Wait 1s
   │
-  └─ PHASE B: Open settings → change to 1:1 → close
-              Click Generate → DO NOT WAIT → proceed immediately
-              Mark description "batches_sent" in state
-              │
-              ▼
-              More descriptions? → YES → next description (PHASE A)
-                                 → NO (end of queue) →
-                                   loop_index++
+  ├─ PHASE 2 — 1:1 group (4 descriptions, one by one, x1 each):
+  │   [1A]  Enter portrait desc          → 1:1 + x1 → Generate → Wait 1s
+  │   [1B]  Enter extreme close-up desc  → 1:1 + x1 → Generate → Wait 1s
+  │   [1C]  Enter flat-lay desc          → 1:1 + x1 → Generate → Wait 1s
+  │   [1D]  Enter demographic variant    → 1:1 + x1 → Generate → Wait 1s
+  │
+  ├─ WAIT — Poll every 10s until all 8 rendered (max 5 min)
+  │
+  ├─ PHASE 3 — Download this series (parallel upscaling, 1s gap):
+  │   Right-click each of 8 images → 2K upscaled → Wait 1s → next
+  │   Background watcher renames + moves files as they auto-download
+  │
+  └─ Series complete → next trend (loop back to first trend when all done)
+             │
+             ▼
+             More trends? → YES → next trend's PHASE 1
+                          → NO  → loop_index++
                                    LOG: "Loop [N] complete. Restarting."
-                                   Reset index to 0
-                                   Restart from first description
-     │
-     ▼ (RUNS IN PARALLEL with generation loop — not sequential)
-DOWNLOAD PHASE (concurrent background process):
-────────────────────────────────────────────────
-Poll gallery every 15s for newly rendered thumbnails
-For each new ready image:
-  → right-click → Download → 2K upscaled → DO NOT WAIT → next image
-  → All upscale jobs run in parallel on server
-  → Files auto-download as each upscale completes
-  → Background watcher renames + moves each file to output folder
-  → Update session_state per confirmed download
+                                   Reset trend_index to 0
+                                   Restart from first trend
      │
      ▼ (triggered at any point during the generation loop)
 RATE LIMIT HANDLER:
@@ -2144,11 +2409,16 @@ C:\AdobeStockAutomation\
     "viewport_height": 1080,
     "models_priority": ["Nano Banana 2", "Nano Banana Pro"],
     "aspect_ratios": ["16:9", "1:1"],
-    "images_per_generation_batch": 4,
-    "descriptions_per_trend": 2,
-    "generation_loop": "infinite — runs until all account credits exhausted",
-    "upscaling_mode": "parallel — submit all 2K requests without waiting",
-    "poll_interval_seconds": 15,
+    "images_per_generation_batch": 1,
+    "descriptions_per_trend": 8,
+    "series_slots_16_9": ["16A_establishing", "16B_close_up", "16C_overhead", "16D_mood_variant"],
+    "series_slots_1_1": ["1A_portrait", "1B_extreme_close_up", "1C_flatlay", "1D_demographic_variant"],
+    "generation_loop": "infinite — create→download per 8-image series, runs until all credits exhausted",
+    "upscaling_mode": "parallel — submit all 8 with 1s gap between each",
+    "generation_wait_between_clicks_ms": 1000,
+    "download_wait_between_clicks_ms": 1000,
+    "series_render_poll_interval_seconds": 10,
+    "series_render_timeout_minutes": 5,
     "dom_settle_ms": 500,
     "page_load_timeout_ms": 30000,
     "retry_max": 3,
