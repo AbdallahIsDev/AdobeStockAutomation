@@ -52,14 +52,14 @@ This file contains the complete strategic knowledge base that governs every deci
 │  ORCHESTRATOR AGENT  (coordinates all sub-agents, manages state)  │
 └───────────────────────────┬───────────────────────────────────────┘
                             │
-          ┌─────────────────┼──────────────────────┐
-          ▼                 ▼                       ▼
-  [SUB-AGENT A]      [SUB-AGENT B]          [SUB-AGENT C]
-  Trend Research     Description            Image Creation
-  & Intelligence     Generator              & Download
-  Agent              Agent                  Agent
-          │                 │                       │
-          └─────────────────┼───────────────────────┘
+          ┌─────────────────┼──────────────────────┬──────────────────┐
+          ▼                 ▼                       ▼                  ▼
+  [SUB-AGENT A]      [SUB-AGENT B]          [SUB-AGENT C]      [SUB-AGENT D]
+  Trend Research     Description            Image Creation     Metadata
+  & Intelligence     Generator              & Download         Generator
+  Agent              Agent                  Agent              Agent
+          │                 │                       │                  │
+          └─────────────────┼───────────────────────┴──────────────────┘
                             ▼
                     [STATE MANAGER]
                     session_state.json
@@ -70,6 +70,9 @@ This file contains the complete strategic knowledge base that governs every deci
 
   All agents above operate with STOCK_SUCCESS_REPORT.md
   loaded in memory as their strategic decision-making foundation.
+
+  Sub-Agent D fires immediately after each image is confirmed downloaded.
+  It writes a .metadata.json sidecar file alongside each image file.
 ```
 
 **Output of this file feeds directly into:**
@@ -92,6 +95,7 @@ The Orchestrator is the master coordinator. It boots up all sub-agents in sequen
 - Launch Sub-Agent A (Trend Research)
 - Pass trend output to Sub-Agent B (Description Generator)
 - Pass descriptions to Sub-Agent C (Image Creation & Download)
+- Sub-Agent D (Metadata Generator) fires automatically after each confirmed download — no manual trigger needed
 - Monitor rate limits and trigger account-switching logic
 - Log all activity to `automation_log.txt`
 - Stop gracefully when all rate limits across all accounts are exhausted
@@ -122,6 +126,7 @@ STEP 4: If no accounts have quota → LOG "All quotas exhausted for today. Stopp
 STEP 5: Launch Sub-Agent A → receive trend_data[]
 STEP 6: Launch Sub-Agent B → receive descriptions[]
 STEP 7: Launch Sub-Agent C → begin image creation loop
+         Sub-Agent D → auto-fires after each confirmed download (no explicit launch needed)
 STEP 8: After each image batch → update session_state.json
 STEP 9: On completion → write final summary to automation_log.txt
 ```
@@ -1191,7 +1196,225 @@ Descriptions are not a fixed quota. Sub-Agent B produces 8 descriptions per tren
 
 ---
 
-## PART 4 — SUB-AGENT C: IMAGE CREATION & DOWNLOAD AGENT
+## PART 3.5 — SUB-AGENT D: METADATA GENERATION AGENT
+
+### Role
+
+Fires immediately after each image is confirmed downloaded in Sub-Agent C. For every downloaded image, Sub-Agent D writes a `.metadata.json` sidecar file alongside the image in the output folder. This sidecar contains the complete Adobe Stock submission metadata — title, keywords, category, AI disclosure, file type, and series context — derived entirely from the generation context that already exists in memory (trend data, series slot, description text). No visual analysis of the image is performed. Context is richest at the moment of creation; this is when metadata is written.
+
+This implements **Method 1** from the architecture decision: metadata is created immediately after image creation, travels with the image through upscaling and upload, and is applied by `03_METADATA_OPTIMIZER.md` without needing to reverse-engineer content from pixels.
+
+---
+
+### When Sub-Agent D Fires
+
+```
+TRIGGER: Each time Sub-Agent C's background file watcher confirms a new
+         image file has arrived in the downloads folder
+
+TIMING:  Runs in parallel with download activity — does not block or delay
+         the generation loop. While Sub-Agent C is submitting upscale requests
+         for the next images, Sub-Agent D is writing sidecar files for the
+         images that already downloaded.
+
+INPUT:   For each downloaded image file, Sub-Agent D receives:
+  - The filename (encodes trend topic, series slot, loop index, timestamp)
+  - The original prompt text (from descriptions.json for that slot)
+  - The trend data record (commercial tags, use cases, visual keywords)
+  - The series slot identity (16A, 16B, 1C, etc.)
+  - The aspect ratio (16:9 or 1:1)
+  - The AI generation flag (always true for Flow-generated images)
+
+OUTPUT:  One .metadata.json sidecar file per image, saved alongside the image:
+  Path: C:\AdobeStockAutomation\downloads\[session_date]\[image_name].metadata.json
+```
+
+---
+
+### Metadata Construction Rules
+
+Sub-Agent D applies the full knowledge from `STOCK_SUCCESS_REPORT.md` Chapters 3 and 4 to construct metadata. Every field is written to the best quality achievable from the known generation context.
+
+#### Title Construction (Chapter 4.1 rules)
+
+```
+Rules:
+- Under 70 characters
+- Lead with primary subject noun
+- Include action/state + setting/context + differentiating modifier
+- No punctuation except commas
+- No "stock photo of", "image of", "AI generated" in the title
+- Title must read as a buyer search query, not a description
+
+Source inputs for title:
+  - Series slot identity → determines the composition framing
+  - Trend topic → determines the primary subject domain
+  - Prompt text → provides specific subject, setting, demographic, mood details
+  - Commercial tags → provide industry and use-case context
+
+Title construction logic by series slot:
+  16A (Establishing):  "[Subject] in [Setting], [Context Descriptor]"
+  16B (Close-up):      "[Detail Subject] Close-Up, [Mood/Industry Context]"
+  16C (Overhead):      "[Subject] Overhead View, [Setting/Style]"
+  16D (Variant):       "[Demographic] [Subject] in [Setting], [Editorial Context]"
+  1A  (Portrait):      "[Demographic] [Subject] [Action/State], [Context]"
+  1B  (Extreme CU):    "[Detail] [Concept] Macro, [Industry/Commercial Context]"
+  1C  (Flat-lay):      "[Subject] Flat Lay, [Setting/Style Descriptor]"
+  1D  (Demo Variant):  "[Demographic] [Subject] [Action], [Cultural Context]"
+```
+
+#### Keyword Construction (Chapter 4.2 — 35-keyword blueprint)
+
+```
+Slot assignment:
+  Slots 1–3:   Most specific buyer-intent phrases (from trend commercial_use_cases)
+  Slots 4–7:   Long-tail conceptual phrases (from prompt text + trend visual_keywords)
+  Slots 8–12:  Descriptive keywords (setting, action, mood — extracted from prompt)
+  Slots 13–20: Conceptual keywords (from trend topic + commercial tags + STOCK_SUCCESS_REPORT niches)
+  Slots 21–28: Technical/format descriptors (aspect ratio, composition, lighting — from prompt)
+  Slots 29–35: Industry + use-case tags (from trend commercial_use_cases + buyer archetype match)
+
+Rules:
+  - 25–35 total keywords (never fewer than 25)
+  - Singular nouns where possible
+  - No repeated words across slots
+  - First 10 must be the strongest buyer-intent phrases
+  - Include: subject, action, setting, mood, industry, demographic (if present), concept, use case
+```
+
+#### Category Selection (Chapter 4.4 rules)
+
+```
+Use the most specific category available.
+Map from trend category + series slot:
+
+  Technology × Finance trends     → "Business" or "Technology"
+  Healthcare trends               → "Healthcare & Medicine"
+  Lifestyle / Wellness            → "Lifestyle" or "Health & Beauty"
+  Conceptual/Abstract             → "Concepts & Metaphors"
+  Environment / Sustainability    → "Nature" or "Environment"
+  Seasonal / Holiday              → "Holidays & Celebrations"
+
+If two categories are equally valid → choose the one with less competition
+(this is the one with fewer Adobe Stock results for the primary keyword).
+```
+
+#### AI Disclosure and Other Fields
+
+```
+"created_with_ai": true          (always — all images come from Google Flow AI)
+"people_are_fictional": true     (always — no real people in AI-generated images)
+"property_is_fictional": true    (always — no real property in AI-generated images)
+"file_type": "Photos"            (for photorealistic AI images — default for Flow output)
+                                 Change to "Illustrations" only if the prompt explicitly
+                                 requested illustrated/painterly style
+"editorial_use_only": false      (default — commercial licenses earn more)
+```
+
+---
+
+### Output: `.metadata.json` Sidecar File
+
+```json
+{
+  "image_file": "ai_finance_16A_establishing_L1_001_20260323.png",
+  "generated_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "series_slot": "16A_establishing",
+  "aspect_ratio": "16:9",
+  "trend_topic": "AI-Driven Financial Decision Making",
+  "trend_category": "Technology × Finance",
+  "loop_index": 1,
+
+  "adobe_stock_metadata": {
+    "title": "Diverse Team Analyzing AI Financial Data in Modern Office",
+    "title_char_count": 57,
+    "keywords": [
+      "AI financial analysis",
+      "diverse professionals technology workspace",
+      "data-driven investment concept",
+      "fintech team collaboration",
+      "banking AI interface",
+      "holographic data visualization",
+      "modern office environment",
+      "focused teamwork",
+      "business analytics",
+      "cool blue lighting cinematic",
+      "professional diverse team",
+      "technology finance intersection",
+      "innovation",
+      "artificial intelligence",
+      "data visualization",
+      "financial technology",
+      "business strategy",
+      "wide establishing shot",
+      "cinematic color grading",
+      "horizontal banner format",
+      "financial services marketing",
+      "tech company website hero",
+      "banking advertising",
+      "investment platform visual",
+      "enterprise software campaign"
+    ],
+    "keyword_count": 25,
+    "category": "Business",
+    "file_type": "Photos",
+    "created_with_ai": true,
+    "people_are_fictional": true,
+    "property_is_fictional": true,
+    "editorial_use_only": false
+  },
+
+  "generation_context": {
+    "prompt_used": "Wide shot of a modern trading floor transformed by AI...",
+    "model_used": "Nano Banana 2",
+    "commercial_use_cases": ["Fintech app advertising", "Banking website hero images"],
+    "visual_keywords_from_trend": ["AI financial analysis", "algorithmic trading concept"]
+  },
+
+  "status": "ready_for_upload",
+  "applied_to_adobe_stock": false
+}
+```
+
+---
+
+### Sidecar File Naming Convention
+
+```
+Image file:    [trend_topic]_[series_slot]_[loop_index]_[seq]_[date].png
+Sidecar file:  [trend_topic]_[series_slot]_[loop_index]_[seq]_[date].metadata.json
+
+Example pair:
+  ai_finance_16A_establishing_L1_001_20260323.png
+  ai_finance_16A_establishing_L1_001_20260323.metadata.json
+
+Both files always travel together. 03_METADATA_OPTIMIZER.md loads the sidecar
+by matching the base filename — no search, no guessing, always deterministic.
+```
+
+---
+
+### Integration with 03_METADATA_OPTIMIZER.md
+
+```
+When 03_METADATA_OPTIMIZER.md processes each uploaded image on Adobe Stock:
+
+  STEP 1: Match the uploaded image filename to its .metadata.json sidecar
+  STEP 2: Load the pre-written metadata from the sidecar (instant, no analysis)
+  STEP 3: Quick visual sanity check (5 seconds):
+          → Does the uploaded image broadly match the series_slot description?
+          → If 16A (establishing wide shot) → confirm it is a wide scene, not a portrait
+          → If obvious drift detected → flag for manual metadata adjustment
+          → If broadly correct → proceed to apply
+  STEP 4: Apply all fields from adobe_stock_metadata to the Adobe Stock form
+  STEP 5: Save (do NOT submit — user submits manually after review)
+  STEP 6: Mark sidecar field "applied_to_adobe_stock": true
+
+This makes 03_METADATA_OPTIMIZER.md a fast, reliable APPLIER — not a slow analyser.
+The metadata quality is highest when written at creation time with full context.
+```
+
+---
 
 ### Role
 
@@ -1583,7 +1806,7 @@ STEP 4: Click Generate (Arrow button)
 STEP 5: Move to next slot in 16:9 group
 - Increment slot index: 16A → 16B → 16C → 16D
 - Repeat Steps 1–4 for the next description
-- After 16D is submitted → proceed to PHASE 2 (1:1 group)
+- After 16D is submitted → proceed to WAIT PHASE 1 (poll for renders, then download)
 ```
 
 **Settings efficiency note:**
@@ -1597,28 +1820,6 @@ Within PHASE 1: aspect ratio stays 16:9, quantity stays x1, model stays same.
 Open settings only to verify or change — do NOT open unnecessarily.
 Between 16B and 16C (same ratio, same quantity): only update the description text,
 then click generate. Settings re-open only needed if anything needs to change.
-```
-
----
-
-#### PHASE 2 — Generate 1:1 Group (4 Descriptions, One by One)
-
-Same process as PHASE 1, but switching aspect ratio to 1:1 at the start:
-
-```
-STEP 1 (first 1:1 image only): Open settings → change aspect ratio to 1:1 → close
-STEP 1 (images 2, 3, 4): Skip opening settings — ratio already set to 1:1
-
-For each of the 4 × 1:1 descriptions (1A → 1B → 1C → 1D):
-
-  → Clear prompt input
-  → Enter the slot-specific description
-  → (Open settings only if ratio or model changed — otherwise skip)
-  → Click Generate
-  → Wait 1 second
-  → Move to next slot
-
-After slot 1D is submitted → proceed to WAIT PHASE
 ```
 
 ---
@@ -1638,16 +1839,16 @@ POLL STRATEGY:
   b. "Limit reached" text detected on any thumbnail → TRIGGER PARTIAL DOWNLOAD
   c. Timeout: 3 minutes elapsed → proceed to PHASE 2 with however many rendered
 
-LIMIT REACHED DETECTION ON RENDERED IMAGES:
-- After each poll, check each new thumbnail for "limit reached" text overlay
-- Signs of limit reached on image:
-  → Thumbnail displays text like "limit reached", "daily limit", "quota exceeded"
-  → Instead of an actual image, the thumbnail shows a placeholder with text
-  → The thumbnail appears "flat" or has visible text overlay
+LIMIT REACHED DETECTION ON RENDERED THUMBNAILS:
+- After each poll, check each new thumbnail container's DOM text content
+- If textContent of thumbnail container matches error patterns:
+  → Thumbnail is a limit-reached error state, NOT a real image
+  → Do NOT attempt to download it
+  → Signs: no valid <img> src, text content present, possible error CSS class
 - If detected:
   → STOP polling immediately
-  → LOG: "Limit reached detected on rendered image. Triggering partial download."
-  → Proceed to PHASE 2 with any successfully rendered images
+  → LOG: "Limit reached detected on rendered thumbnail (DOM text). Triggering partial download."
+  → Proceed to PHASE 2 with any successfully rendered real images
   → After download, trigger model/account switch
 
 TRACKING:
@@ -1840,7 +2041,7 @@ Download:
   → All upscales run in parallel on the server
 
 Between series:
-  → No fixed delay — proceed to next series as soon as PHASE 3 download
+  → No fixed delay — proceed to next series as soon as PHASE 4 download
     requests are all submitted (background watcher handles file arrival)
   → The 1s gaps between download clicks effectively pace the transition
 ```
@@ -1871,43 +2072,52 @@ Rate Limit Signals to Detect (Modal/Toast):
 4. Progress bar never starts after clicking Generate
 ```
 
-**Method 2: On Rendered Image (Text Overlay) — PRIMARY METHOD**
+**Method 2: On Rendered Image (Text Overlay in DOM) — PRIMARY METHOD**
 
-When the daily limit is reached, Google Flow often does NOT show an error modal. Instead:
+When the daily limit is reached, Google Flow often does NOT show an error modal. Instead, it renders the thumbnail slot with a text-based error state. This text is present in the DOM — it does not need to be read from pixel data via OCR.
 
 ```
-Rate Limit Signals to Detect (On Rendered Image):
-1. Thumbnail renders with visible TEXT instead of an actual image
-2. Text overlay patterns to look for:
+Rate Limit Signals to Detect (On Rendered Thumbnail):
+1. The thumbnail container element renders with visible TEXT content instead of an image
+2. Text patterns to search for inside the thumbnail DOM node and its children:
    - "limit reached"
    - "daily limit"
    - "quota exceeded"
    - "generations limited"
    - "try again later"
-   - Any error message displayed as text on the image
-3. Visual indicators:
-   - Thumbnail appears "flat" or plain colored
-   - Text is clearly visible in the thumbnail preview
-   - No actual subject/content rendered — just text on background
+   - "out of credits"
+   - Any text that does not describe the image subject
+3. Visual indicators (observable in DOM):
+   - The <img> element inside the thumbnail is absent or has a placeholder src
+   - A text or error element is the primary visible child of the thumbnail container
+   - The thumbnail container has an error CSS class or data attribute
 
-Detection Method:
-- After each gallery poll, examine new thumbnails for text overlay
-- Use OCR or text detection on thumbnail area
-- If text matches error patterns → LIMIT_REACHED_ON_IMAGE = true
-- This is the MOST COMMON way limits are signaled
+Detection Implementation:
+- After each gallery poll, for every new thumbnail that appeared:
+  a. Read the text content of the thumbnail container element and all its children:
+     thumbnailEl.innerText OR thumbnailEl.textContent
+  b. If the text content matches any error pattern above → LIMIT_REACHED = true
+  c. If the thumbnail has a valid <img> with a non-placeholder src → it is a real image
+- This is pure DOM inspection — no OCR, no image processing required
+- React renders error states as DOM text nodes, same as any other content
+
+IMPORTANT: Do NOT attempt pixel-level OCR on the thumbnail image data.
+The error state is always in the DOM as text — reading textContent is instant and reliable.
 ```
 
 **Detection Code Logic:**
 
 ```
 After clicking Generate OR during gallery poll:
-- Wait for render to complete (thumbnail appears)
-- Scan thumbnail for text content:
-  a. Use OCR on thumbnail image
-  b. Check for error text patterns (limit, quota, exceeded, etc.)
-- If error text found → LIMIT_REACHED_ON_IMAGE = true
-- If no error text → check for modal/toast errors
-- If neither → continue normally
+- Wait for render to complete (thumbnail container appears in DOM)
+- Check Method 2 first (DOM text inspection — fast):
+  a. Get the thumbnail container element
+  b. Read its textContent or innerText
+  c. If text matches error patterns → LIMIT_REACHED = true → trigger handler
+- If no DOM text found → check Method 1 (modal/toast scan):
+  a. Scan page DOM for modal or toast elements containing error text patterns
+  b. If found → LIMIT_REACHED = true → trigger handler
+- If neither → thumbnail is a valid image → continue normally
 ```
 
 #### Model Switching Logic
@@ -2379,8 +2589,8 @@ For each trend → generate 8 angle-specific descriptions:
 Output: descriptions.json (8 per trend, no fixed total)
      │
      ▼
-SUB-AGENT C: Image Creation Agent
-───────────────────────────────────
+SUB-AGENT C: Image Creation & Download Agent
+───────────────────────────────────────────
 BROWSER SETUP:
   → Check if debug browser already running on port 9222
   → If not: launch C:\Users\11\browser-automation-core\launch_browser.bat 9222 GoogleFlowProfile
@@ -2408,6 +2618,7 @@ SETTINGS VERIFICATION:
 ╔══════════════════════════════════════════════════════════════════╗
 ║  INFINITE SERIES LOOP (create→download per trend, no end count)  ║
 ║  Downloads in TWO BATCHES of 4 images each                       ║
+║  Sub-Agent D writes metadata sidecar after each confirmed DL     ║
 ║  Runs until ALL accounts + ALL models are exhausted              ║
 ╚══════════════════════════════════════════════════════════════════╝
      │
@@ -2425,11 +2636,13 @@ FOR EACH trend (cycling — restarts from 0 when all trends done):
   │   [16D] Enter mood/variant desc      → 16:9 + x1 → Generate → Wait 1s
   │
   ├─ WAIT PHASE 1 — Poll every 10s until all 4 × 16:9 rendered (max 3 min)
-  │   Check for "limit reached" text on thumbnails → if found, trigger partial download
+  │   Check DOM text of each thumbnail → if error text found, trigger partial download
   │
   ├─ PHASE 2 — Download 16:9 group (parallel upscaling, 1s gap):
   │   Right-click each of 4 images → 2K upscaled → Wait 1s → next
   │   Background watcher renames + moves files as they auto-download
+  │   └─ SUB-AGENT D fires per confirmed download:
+  │       Write [image_name].metadata.json sidecar alongside each image
   │
   ├─ PHASE 3 — 1:1 group (4 descriptions, one by one, x1 each):
   │   [1A]  Enter portrait desc          → 1:1 + x1 → Generate → Wait 1s
@@ -2438,11 +2651,13 @@ FOR EACH trend (cycling — restarts from 0 when all trends done):
   │   [1D]  Enter demographic variant    → 1:1 + x1 → Generate → Wait 1s
   │
   ├─ WAIT PHASE 2 — Poll every 10s until all 4 × 1:1 rendered (max 3 min)
-  │   Check for "limit reached" text on thumbnails → if found, trigger partial download
+  │   Check DOM text of each thumbnail → if error text found, trigger partial download
   │
   ├─ PHASE 4 — Download 1:1 group (parallel upscaling, 1s gap):
   │   Right-click each of 4 images → 2K upscaled → Wait 1s → next
   │   Background watcher renames + moves files as they auto-download
+  │   └─ SUB-AGENT D fires per confirmed download:
+  │       Write [image_name].metadata.json sidecar alongside each image
   │
   └─ Series complete → next trend (loop back to first trend when all done)
              │
@@ -2524,11 +2739,12 @@ EXIT
 | Page load failure                | Timeout >30s, no DOM response       | Reload page, retry 3×            |
 | Selector not found               | querySelector returns null          | Re-run selector discovery        |
 | Modal/popup blocking interaction | Unexpected overlay in DOM           | Dismiss overlay, log, retry      |
-| Generation job silent failure    | No new images after 5 min           | Re-submit description            |
+| Generation job silent failure    | No new images after 3 min           | Re-submit description            |
 | Download failure                 | File not in downloads after 60s     | Retry download from gallery      |
 | Login session expired            | Redirected to login page            | Re-login with current account    |
 | Network timeout                  | Request timeout exception           | Wait 10s, retry 3×               |
 | Rate limit false positive        | Error shown but generation proceeds | Log warning, continue monitoring |
+| Metadata sidecar write failure   | .metadata.json not created after DL | Retry write using cached context; log if still fails |
 
 
 ### Retry Policy
@@ -2556,16 +2772,24 @@ C:\AdobeStockAutomation\
 │
 ├── downloads\
 │   └── [YYYY-MM-DD]\
-│       ├── ai_finance_16x9_L1_001_20260323.png
-│       ├── ai_finance_1x1_L1_002_20260323.png
-│       ├── climate_tech_16x9_L1_003_20260323.png
+│       ├── ai_finance_16A_establishing_L1_001_20260323.png
+│       ├── ai_finance_16A_establishing_L1_001_20260323.metadata.json  ← Sub-Agent D
+│       ├── ai_finance_16B_close_up_L1_002_20260323.png
+│       ├── ai_finance_16B_close_up_L1_002_20260323.metadata.json      ← Sub-Agent D
+│       ├── ai_finance_16C_overhead_L1_003_20260323.png
+│       ├── ai_finance_16C_overhead_L1_003_20260323.metadata.json      ← Sub-Agent D
+│       ├── ai_finance_16D_mood_variant_L1_004_20260323.png
+│       ├── ai_finance_16D_mood_variant_L1_004_20260323.metadata.json  ← Sub-Agent D
+│       ├── ai_finance_1A_portrait_L1_005_20260323.png
+│       ├── ai_finance_1A_portrait_L1_005_20260323.metadata.json       ← Sub-Agent D
 │       └── ...  (no fixed count — grows until all credits exhausted)
+│       (every image always paired with its .metadata.json sidecar)
 │
 ├── data\
 │   ├── STOCK_SUCCESS_REPORT.md          ← READ FIRST on every session (Step 0)
 │   ├── session_state.json               ← updated continuously during session
 │   ├── trend_data.json                  ← regenerated every session
-│   ├── descriptions.json                ← regenerated every session (2 per trend)
+│   ├── descriptions.json                ← regenerated every session (8 per trend)
 │   ├── accounts.json                    ← manually maintained, add accounts freely
 │   ├── selectors_registry.json          ← built ONCE, updated only on selector failure
 │   └── static_knowledge_cache.json      ← built ONCE, refreshed every 90 days
@@ -2645,14 +2869,16 @@ Upon session completion (or when the generation loop pauses between account swit
     "images_ready_for_processing": true,
     "images_folder": "C:\\AdobeStockAutomation\\downloads\\[YYYY-MM-DD]",
     "images_downloaded_count": "[dynamic — no fixed number]",
+    "metadata_sidecars_written": "[same count as images — always paired]",
     "loop_passes_completed": "[N]",
     "trend_topics_used": ["AI Finance", "Climate Tech", "..."],
-    "descriptions_reference": "C:\\AdobeStockAutomation\\data\\descriptions.json"
+    "descriptions_reference": "C:\\AdobeStockAutomation\\data\\descriptions.json",
+    "sidecar_naming_convention": "[image_basename].metadata.json"
   }
 }
 ```
 
-`02_IMAGE_UPSCALER.md` reads this handoff block to know which folder to process and passes its output to `03_METADATA_OPTIMIZER.md`.
+`02_IMAGE_UPSCALER.md` reads this handoff block to know which folder to process. Every `.png` in the folder has a paired `.metadata.json` sidecar that travels with it through upscaling. `03_METADATA_OPTIMIZER.md` reads these sidecars to apply pre-written metadata to each uploaded image on Adobe Stock — no reverse-engineering from pixels required.
 
 ---
 
