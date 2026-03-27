@@ -145,6 +145,7 @@ STEP 9: On completion → write final summary to automation_log.txt
   ],
   "current_model": "Nano Banana 2",
   "current_aspect_ratio": "16:9",
+  "current_phase": "PHASE_1",
   "loop_index": 0,
   "current_description_index": 0,
   "descriptions_queue": [],
@@ -152,6 +153,14 @@ STEP 9: On completion → write final summary to automation_log.txt
   "images_downloaded_count": 0,
   "upscale_requested_ids": [],
   "downloaded_images": [],
+  "current_16x9_submitted": [],
+  "current_16x9_rendered": [],
+  "current_16x9_downloaded": [],
+  "current_1x1_submitted": [],
+  "current_1x1_rendered": [],
+  "current_1x1_downloaded": [],
+  "limit_reached_on_image": false,
+  "partial_download_required": false,
   "errors": []
 }
 ```
@@ -1475,7 +1484,8 @@ else:
 
 ```
 The fundamental unit of work is ONE SERIES = 8 images for ONE TREND.
-The flow for every series:
+Downloads happen in TWO BATCHES of 4 images each — after the 16:9 group
+completes, then after the 1:1 group completes.
 
   ┌────────────────────────────────────────────────────────────┐
   │  SERIES CYCLE (repeated for every trend, loops infinitely) │
@@ -1489,33 +1499,54 @@ The flow for every series:
   └─ [16D] Enter mood/variant description     → Set 16:9 + x1 → Generate → Wait 1s
          │
          ▼
-  PHASE 2 — Generate 1:1 group (4 images, one by one)
+  WAIT PHASE 1 — Poll gallery until all 4 × 16:9 images are fully rendered
+  (thumbnails visible, not spinning, NOT showing "limit reached" text)
+  — poll every 10 seconds, max wait 3 min
+         │
+         ▼
+  PHASE 2 — Download 16:9 group (4 images, parallel upscaling)
+  ├─ Right-click image 1 → 2K upscaled → Wait 1s → next
+  ├─ Right-click image 2 → 2K upscaled → Wait 1s → next
+  ├─ Right-click image 3 → 2K upscaled → Wait 1s → next
+  └─ Right-click image 4 → 2K upscaled → Wait 1s
+  All 4 upscale concurrently on server → files auto-download
+         │
+         ▼
+  PHASE 3 — Generate 1:1 group (4 images, one by one)
   ├─ [1A]  Enter portrait description         → Set 1:1 + x1 → Generate → Wait 1s
   ├─ [1B]  Enter extreme close-up description → Set 1:1 + x1 → Generate → Wait 1s
   ├─ [1C]  Enter flat-lay description         → Set 1:1 + x1 → Generate → Wait 1s
   └─ [1D]  Enter demographic variant desc.    → Set 1:1 + x1 → Generate → Wait 1s
          │
          ▼
-  WAIT — Poll gallery until all 8 images for this series are fully rendered
-  (thumbnails visible and not spinning) — poll every 10 seconds, max wait 5 min
+  WAIT PHASE 2 — Poll gallery until all 4 × 1:1 images are fully rendered
+  — poll every 10 seconds, max wait 3 min
          │
          ▼
-  PHASE 3 — Download this series (8 images, parallel upscaling)
+  PHASE 4 — Download 1:1 group (4 images, parallel upscaling)
   ├─ Right-click image 1 → 2K upscaled → Wait 1s → next
   ├─ Right-click image 2 → 2K upscaled → Wait 1s → next
-  ├─ ... (repeat for all 8)
-  └─ All 8 upscale concurrently on server → files auto-download
+  ├─ Right-click image 3 → 2K upscaled → Wait 1s → next
+  └─ Right-click image 4 → 2K upscaled → Wait 1s
+  All 4 upscale concurrently on server → files auto-download
          │
          ▼
   ✓ Series complete — move to NEXT TREND → repeat from PHASE 1
   (Loop infinitely through all trends until rate limit or all accounts exhausted)
 ```
 
-**Why create→download per series (not globally at the end):**
-- Every image is accounted for immediately after creation — zero missed images
-- If a rate limit hits mid-session, everything generated so far is already downloaded
-- Account switches are clean — download first, then switch, then continue
-- No dependency on remembering which images were created across the entire session
+**Why download after every 4 images (not after all 8):**
+- Faster feedback loop — if a rate limit hits during 1:1 generation, the 16:9 group is already downloaded
+- Reduced risk of lost images — smaller batches mean fewer images at risk if something goes wrong
+- Better resource management — server-side upscale jobs are spread across two waves instead of one large batch
+- Account switches are cleaner — partial work is already saved before switching
+- If only 1-3 images render before limit is reached, those are already downloaded
+
+**Rate Limit Detection on Image Render:**
+- When the daily limit is reached, Google Flow does NOT show an error modal
+- Instead, it renders an image with TEXT displayed on it (e.g., "limit reached", "daily limit exceeded")
+- The agent must detect this by checking if the rendered thumbnail contains text overlay
+- If "limit reached" text is detected on any image → immediately trigger partial download + account switch
 
 ---
 
@@ -1592,41 +1623,54 @@ After slot 1D is submitted → proceed to WAIT PHASE
 
 ---
 
-#### WAIT PHASE — Wait for All 8 Images to Render
+#### WAIT PHASE 1 — Wait for 16:9 Group (4 Images) to Render
 
 ```
-After all 8 generation jobs are submitted for this trend series:
+After all 4 × 16:9 generation jobs are submitted:
 
 POLL STRATEGY:
 - Poll the project gallery every 10 seconds
-- For each of the 8 generation jobs tracked in session_state:
+- For each of the 4 generation jobs tracked in session_state:
   check if a rendered thumbnail (non-spinning) has appeared
-- Count how many of the 8 are fully rendered
+- Count how many of the 4 are fully rendered
 - Continue polling until:
-  a. All 8 thumbnails are fully rendered → proceed to PHASE 3 (download)
-  b. Timeout: 5 minutes elapsed → proceed to PHASE 3 with however many rendered
+  a. All 4 thumbnails are fully rendered → proceed to PHASE 2 (download 16:9 group)
+  b. "Limit reached" text detected on any thumbnail → TRIGGER PARTIAL DOWNLOAD
+  c. Timeout: 3 minutes elapsed → proceed to PHASE 2 with however many rendered
+
+LIMIT REACHED DETECTION ON RENDERED IMAGES:
+- After each poll, check each new thumbnail for "limit reached" text overlay
+- Signs of limit reached on image:
+  → Thumbnail displays text like "limit reached", "daily limit", "quota exceeded"
+  → Instead of an actual image, the thumbnail shows a placeholder with text
+  → The thumbnail appears "flat" or has visible text overlay
+- If detected:
+  → STOP polling immediately
+  → LOG: "Limit reached detected on rendered image. Triggering partial download."
+  → Proceed to PHASE 2 with any successfully rendered images
+  → After download, trigger model/account switch
 
 TRACKING:
-- session_state.current_series_submitted = [list of 8 generation job IDs or positions]
-- session_state.current_series_rendered = [list of rendered thumbnails]
+- session_state.current_16x9_submitted = [list of 4 generation job IDs or positions]
+- session_state.current_16x9_rendered = [list of rendered thumbnails]
 - Match rendered thumbnails to submitted jobs by position in gallery (newest first)
 
 TIMEOUT BEHAVIOR:
-- If after 5 minutes fewer than 8 images have rendered:
+- If after 3 minutes fewer than 4 images have rendered:
   → Download whatever has rendered
-  → Log: "Timeout: [N] of 8 images rendered for trend [topic]. Downloading [N]."
+  → Log: "Timeout: [N] of 4 16:9 images rendered for trend [topic]. Downloading [N]."
   → Mark unrendered slots as "generation_failed" in session_state
-  → Continue to next trend (do not retry failed generations in current session)
+  → Continue to PHASE 3 (1:1 generation)
 ```
 
 ---
 
-#### PHASE 3 — Download This Series (8 Images, Parallel Upscaling)
+#### PHASE 2 — Download 16:9 Group (4 Images, Parallel Upscaling)
 
 ```
-After all rendered images for this series are identified:
+After all rendered 16:9 images for this series are identified:
 
-FOR EACH rendered image in the series (right-click method):
+FOR EACH rendered 16:9 image (right-click method):
 
   STEP 1: Hover over the image thumbnail → wait 500ms for hover menu DOM
   STEP 2: Right-click the image → wait for context menu modal
@@ -1636,7 +1680,7 @@ FOR EACH rendered image in the series (right-click method):
   STEP 6: Mark image as "upscale_requested" in session_state
   STEP 7: Move to the NEXT image immediately — do NOT wait for upscale to finish
 
-All 8 upscale jobs run in parallel on Google's servers.
+All 4 upscale jobs run in parallel on Google's servers.
 Files auto-download to system downloads folder as each completes.
 
 BACKGROUND FILE WATCHER (runs continuously during session):
@@ -1650,10 +1694,81 @@ BACKGROUND FILE WATCHER (runs continuously during session):
       d. Increment images_downloaded_count
       e. Log: "Downloaded: [filename]"
 
-SERIES DOWNLOAD COMPLETE SIGNAL:
-  → All 8 images for this series confirmed in downloaded_images list
+16:9 GROUP DOWNLOAD COMPLETE SIGNAL:
+  → All 4 images for this group confirmed in downloaded_images list
   → OR: 60 seconds have passed since last upscale request with no more pending
-  → Log: "Series [trend_topic] complete. [N] images downloaded."
+  → Log: "16:9 group for [trend_topic] complete. [N] images downloaded."
+  → Proceed to PHASE 3 (1:1 generation)
+```
+
+---
+
+#### PHASE 3 — Generate 1:1 Group (4 Descriptions, One by One)
+
+```
+Same process as PHASE 1, but switching aspect ratio to 1:1 at the start:
+
+STEP 1 (first 1:1 image only): Open settings → change aspect ratio to 1:1 → close
+STEP 1 (images 2, 3, 4): Skip opening settings — ratio already set to 1:1
+
+For each of the 4 × 1:1 descriptions (1A → 1B → 1C → 1D):
+
+  → Clear prompt input
+  → Enter the slot-specific description
+  → (Open settings only if ratio or model changed — otherwise skip)
+  → Click Generate
+  → Wait 1 second
+  → Move to next slot
+
+After slot 1D is submitted → proceed to WAIT PHASE 2
+```
+
+---
+
+#### WAIT PHASE 2 — Wait for 1:1 Group (4 Images) to Render
+
+```
+Same logic as WAIT PHASE 1, but for 1:1 images:
+
+POLL STRATEGY:
+- Poll the project gallery every 10 seconds
+- For each of the 4 generation jobs tracked in session_state:
+  check if a rendered thumbnail (non-spinning) has appeared
+- Continue polling until:
+  a. All 4 thumbnails are fully rendered → proceed to PHASE 4 (download 1:1 group)
+  b. "Limit reached" text detected on any thumbnail → TRIGGER PARTIAL DOWNLOAD
+  c. Timeout: 3 minutes elapsed → proceed to PHASE 4 with however many rendered
+
+LIMIT REACHED HANDLING:
+- If "limit reached" text detected on any 1:1 thumbnail:
+  → STOP polling immediately
+  → Download any successfully rendered 1:1 images first
+  → Then trigger model/account switch
+  → Resume from where left off (the failed slot) with new account/model
+```
+
+---
+
+#### PHASE 4 — Download 1:1 Group (4 Images, Parallel Upscaling)
+
+```
+Same process as PHASE 2, but for 1:1 images:
+
+FOR EACH rendered 1:1 image (right-click method):
+
+  STEP 1: Hover over the image thumbnail → wait 500ms for hover menu DOM
+  STEP 2: Right-click the image → wait for context menu modal
+  STEP 3: Hover over "Download" → wait 300ms for sub-menu
+  STEP 4: Click "2K upscaled"
+  STEP 5: Wait 1 second (UI registration)
+  STEP 6: Mark image as "upscale_requested" in session_state
+  STEP 7: Move to the NEXT image immediately
+
+1:1 GROUP DOWNLOAD COMPLETE SIGNAL:
+  → All 4 images for this group confirmed in downloaded_images list
+  → OR: 60 seconds have passed since last upscale request with no more pending
+  → Log: "1:1 group for [trend_topic] complete. [N] images downloaded."
+  → Log: "Series [trend_topic] complete. Total: [N] images downloaded."
   → Proceed to next trend → begin next series PHASE 1
 ```
 
@@ -1662,18 +1777,21 @@ SERIES DOWNLOAD COMPLETE SIGNAL:
 #### Rate Limit During Generation — Download First, Then Switch
 
 ```
-IF a rate limit error is detected at ANY point during PHASE 1 or PHASE 2:
+IF a rate limit error is detected at ANY point during PHASE 1 or PHASE 3:
 
   STEP 1: STOP submitting new generation jobs immediately
-  STEP 2: LOG: "Rate limit hit after [N] of 8 images submitted for [trend_topic]."
+  STEP 2: LOG: "Rate limit hit after [N] of 4 images submitted for [aspect_ratio] group."
 
   STEP 3: WAIT for any already-submitted jobs to finish rendering
           → Poll gallery for up to 3 minutes for pending renders
           → Collect all rendered thumbnails
+          → CHECK each thumbnail for "limit reached" text overlay
+          → If "limit reached" text found on thumbnail → exclude from download
 
-  STEP 4: DOWNLOAD all rendered images for the current partial series
-          → Run PHASE 3 download process on whatever rendered
+  STEP 4: DOWNLOAD all successfully rendered images (excluding limit-reached images)
+          → Run download process on whatever rendered correctly
           → DO NOT skip this step — download everything before switching
+          → If only 1-3 images rendered correctly → download those
 
   STEP 5: Update session_state:
           → Mark which slots were submitted (status: "batches_sent")
@@ -1685,8 +1803,25 @@ IF a rate limit error is detected at ANY point during PHASE 1 or PHASE 2:
           → If both models exhausted → switch account → reset model to Nano Banana 2
           → If all accounts exhausted → proceed to session complete
 
-  STEP 7: After switching — resume from the NEXT incomplete series
-          (The partially completed series will be retried in the next loop pass)
+  STEP 7: After switching — resume from the NEXT incomplete slot
+          → The partially completed series will be retried in the next loop pass
+
+PARTIAL DOWNLOAD HANDLING (1-3 images before limit):
+─────────────────────────────────────────────────────
+If only 1, 2, or 3 images were successfully rendered before the limit was reached:
+
+  → DOWNLOAD those images immediately using the 2K upscaled process
+  → LOG: "Partial download: [N] images saved before limit reached."
+  → UPDATE session_state with downloaded image IDs
+  → THEN trigger model/account switch
+  → RESUME generation from the first uncompleted slot after switch
+
+Example scenario:
+  - PHASE 1: Submitted 16A, 16B, 16C successfully
+  - PHASE 1: 16D generation returns "limit reached" image
+  - ACTION: Wait for 16A, 16B, 16C to render → download them
+  - ACTION: Switch model/account
+  - RESUME: Start from 16D with new account, then continue to 1:1 group
 ```
 
 ---
@@ -1716,10 +1851,14 @@ Between series:
 
 #### Detecting Rate Limit Errors
 
+Rate limits can be detected in TWO different ways:
+
+**Method 1: During Generation (Modal/Toast Errors)**
+
 During or after clicking Generate, monitor for any of these signals:
 
 ```
-Rate Limit Signals to Detect:
+Rate Limit Signals to Detect (Modal/Toast):
 1. Modal/toast message containing text like:
    - "limit reached"
    - "quota exceeded"
@@ -1732,26 +1871,57 @@ Rate Limit Signals to Detect:
 4. Progress bar never starts after clicking Generate
 ```
 
+**Method 2: On Rendered Image (Text Overlay) — PRIMARY METHOD**
+
+When the daily limit is reached, Google Flow often does NOT show an error modal. Instead:
+
+```
+Rate Limit Signals to Detect (On Rendered Image):
+1. Thumbnail renders with visible TEXT instead of an actual image
+2. Text overlay patterns to look for:
+   - "limit reached"
+   - "daily limit"
+   - "quota exceeded"
+   - "generations limited"
+   - "try again later"
+   - Any error message displayed as text on the image
+3. Visual indicators:
+   - Thumbnail appears "flat" or plain colored
+   - Text is clearly visible in the thumbnail preview
+   - No actual subject/content rendered — just text on background
+
+Detection Method:
+- After each gallery poll, examine new thumbnails for text overlay
+- Use OCR or text detection on thumbnail area
+- If text matches error patterns → LIMIT_REACHED_ON_IMAGE = true
+- This is the MOST COMMON way limits are signaled
+```
+
 **Detection Code Logic:**
 
 ```
-After clicking Generate:
-- Wait 3 seconds
-- Scan DOM for error text patterns (above signals)
-- If error found → RATE_LIMIT_DETECTED = true
-- If no error → continue normally
+After clicking Generate OR during gallery poll:
+- Wait for render to complete (thumbnail appears)
+- Scan thumbnail for text content:
+  a. Use OCR on thumbnail image
+  b. Check for error text patterns (limit, quota, exceeded, etc.)
+- If error text found → LIMIT_REACHED_ON_IMAGE = true
+- If no error text → check for modal/toast errors
+- If neither → continue normally
 ```
 
 #### Model Switching Logic
 
 ```
-IF RATE_LIMIT_DETECTED:
+IF RATE_LIMIT_DETECTED (via modal/toast) OR LIMIT_REACHED_ON_IMAGE (via thumbnail text):
 
   CASE 1: Current model is "Nano Banana 2"
   ─────────────────────────────────────────
   → Set session_state.current_account.nano_banana_2_exhausted = true
   → Switch model to "Nano Banana Pro"
   → Update session_state.current_model = "Nano Banana Pro"
+  → IF images rendered successfully before limit:
+      → Download those images first (PHASE 2 or PHASE 4 download process)
   → Retry the SAME generation that failed (re-send current description + aspect ratio)
   → Log: "Switched from Nano Banana 2 to Nano Banana Pro for account [email]"
   → Continue generation loop with Nano Banana Pro
@@ -1760,13 +1930,15 @@ IF RATE_LIMIT_DETECTED:
   ─────────────────────────────────────────────────────────────────
   → Set session_state.current_account.nano_banana_pro_exhausted = true
   → Set session_state.current_account.fully_exhausted = true
+  → IF images rendered successfully before limit:
+      → Download those images first
   → Log: "Account [email] fully exhausted. Switching to next account."
   → TRIGGER ACCOUNT SWITCHING PROCEDURE (see Section 4.5)
 
   CASE 3: All accounts fully exhausted
   ─────────────────────────────────────
   → Log: "ALL ACCOUNTS EXHAUSTED. No more generation possible today."
-  → Proceed to DOWNLOAD PHASE to collect all images created so far
+  → Proceed to download any remaining rendered images
   → Write final state to session_state.json
   → EXIT generation loop
 ```
@@ -2080,22 +2252,33 @@ When extracting selectors, prefer in this order:
 
 ### 4.7 — IMAGE DOWNLOAD PHASE
 
-> The download phase is now fully integrated into the series creation cycle in **Section 4.3 — PHASE 3**. Download happens immediately after each 8-image series is generated — not at the end of the session.
+> The download phase is now fully integrated into the series creation cycle in **Section 4.3 — PHASE 2 and PHASE 4**. Downloads happen immediately after each 4-image group is generated — not at the end of the session.
 >
 > This ensures zero missed images regardless of when a rate limit hits or an account switch occurs.
 
 #### Download Behavior Summary
 
 ```
-WHEN: Immediately after all 8 images in a series have rendered (or timeout)
+WHEN: Immediately after each 4-image group renders (or timeout)
+      - PHASE 2: Download 16:9 group after WAIT PHASE 1
+      - PHASE 4: Download 1:1 group after WAIT PHASE 2
 HOW:  Right-click each image → 2K upscaled → Wait 1s → next image
       All upscale jobs run in parallel on server
       Files auto-download as each completes
       Background watcher renames + moves files to output folder
 
 RATE LIMIT INTERRUPT:
-  If limit hits mid-series → wait for renders → download partial series
+  If limit hits mid-group → wait for renders → check for "limit reached" text
+  → Download only successfully rendered images (even if just 1-3)
   → THEN switch model/account → never skip the download step
+
+PARTIAL DOWNLOAD HANDLING:
+  If only 1-3 images rendered before "limit reached" text detected:
+  → Download those images immediately
+  → Log: "Partial download: [N] images saved before limit."
+  → Update session_state with downloaded image IDs
+  → Then trigger model/account switch
+  → Resume from first uncompleted slot after switch
 
 SESSION END CLEANUP:
   After the infinite loop stops (all accounts exhausted):
@@ -2107,10 +2290,10 @@ SESSION END CLEANUP:
 #### Download Verification
 
 ```
-Per-series verification (after PHASE 3):
-- Compare session_state.current_series_rendered vs current_series_downloaded
+Per-group verification (after PHASE 2 and PHASE 4):
+- Compare session_state.current_group_rendered vs current_group_downloaded
 - If any gap → log + retry download for missed images
-- Log: "Series [topic] downloaded: [N]/8 images."
+- Log: "[16:9/1:1] group for [topic] downloaded: [N]/4 images."
 
 Session-end verification:
 - Final gallery scan confirms no undownloaded images remain
@@ -2224,6 +2407,7 @@ SETTINGS VERIFICATION:
      ▼
 ╔══════════════════════════════════════════════════════════════════╗
 ║  INFINITE SERIES LOOP (create→download per trend, no end count)  ║
+║  Downloads in TWO BATCHES of 4 images each                       ║
 ║  Runs until ALL accounts + ALL models are exhausted              ║
 ╚══════════════════════════════════════════════════════════════════╝
      │
@@ -2240,16 +2424,24 @@ FOR EACH trend (cycling — restarts from 0 when all trends done):
   │   [16C] Enter overhead desc          → 16:9 + x1 → Generate → Wait 1s
   │   [16D] Enter mood/variant desc      → 16:9 + x1 → Generate → Wait 1s
   │
-  ├─ PHASE 2 — 1:1 group (4 descriptions, one by one, x1 each):
+  ├─ WAIT PHASE 1 — Poll every 10s until all 4 × 16:9 rendered (max 3 min)
+  │   Check for "limit reached" text on thumbnails → if found, trigger partial download
+  │
+  ├─ PHASE 2 — Download 16:9 group (parallel upscaling, 1s gap):
+  │   Right-click each of 4 images → 2K upscaled → Wait 1s → next
+  │   Background watcher renames + moves files as they auto-download
+  │
+  ├─ PHASE 3 — 1:1 group (4 descriptions, one by one, x1 each):
   │   [1A]  Enter portrait desc          → 1:1 + x1 → Generate → Wait 1s
   │   [1B]  Enter extreme close-up desc  → 1:1 + x1 → Generate → Wait 1s
   │   [1C]  Enter flat-lay desc          → 1:1 + x1 → Generate → Wait 1s
   │   [1D]  Enter demographic variant    → 1:1 + x1 → Generate → Wait 1s
   │
-  ├─ WAIT — Poll every 10s until all 8 rendered (max 5 min)
+  ├─ WAIT PHASE 2 — Poll every 10s until all 4 × 1:1 rendered (max 3 min)
+  │   Check for "limit reached" text on thumbnails → if found, trigger partial download
   │
-  ├─ PHASE 3 — Download this series (parallel upscaling, 1s gap):
-  │   Right-click each of 8 images → 2K upscaled → Wait 1s → next
+  ├─ PHASE 4 — Download 1:1 group (parallel upscaling, 1s gap):
+  │   Right-click each of 4 images → 2K upscaled → Wait 1s → next
   │   Background watcher renames + moves files as they auto-download
   │
   └─ Series complete → next trend (loop back to first trend when all done)
@@ -2264,6 +2456,17 @@ FOR EACH trend (cycling — restarts from 0 when all trends done):
      ▼ (triggered at any point during the generation loop)
 RATE LIMIT HANDLER:
 ────────────────────
+Detection Methods:
+  1. Modal/toast error message
+  2. "Limit reached" TEXT rendered on image thumbnail ← PRIMARY METHOD
+
+If limit detected during PHASE 1 or PHASE 3:
+  → STOP submitting new generations
+  → WAIT for pending renders (max 3 min)
+  → CHECK thumbnails for "limit reached" text
+  → DOWNLOAD any successfully rendered images (even if only 1-3)
+  → THEN switch model/account
+
 If Nano Banana 2 limit reached:
   → session_state: nano_banana_2_exhausted = true
   → Switch model to Nano Banana Pro
@@ -2413,12 +2616,13 @@ C:\AdobeStockAutomation\
     "descriptions_per_trend": 8,
     "series_slots_16_9": ["16A_establishing", "16B_close_up", "16C_overhead", "16D_mood_variant"],
     "series_slots_1_1": ["1A_portrait", "1B_extreme_close_up", "1C_flatlay", "1D_demographic_variant"],
-    "generation_loop": "infinite — create→download per 8-image series, runs until all credits exhausted",
-    "upscaling_mode": "parallel — submit all 8 with 1s gap between each",
+    "generation_loop": "infinite — create→download in 4-image batches, runs until all credits exhausted",
+    "download_batch_size": 4,
+    "upscaling_mode": "parallel — submit all 4 with 1s gap between each",
     "generation_wait_between_clicks_ms": 1000,
     "download_wait_between_clicks_ms": 1000,
     "series_render_poll_interval_seconds": 10,
-    "series_render_timeout_minutes": 5,
+    "series_render_timeout_minutes": 3,
     "dom_settle_ms": 500,
     "page_load_timeout_ms": 30000,
     "retry_max": 3,
