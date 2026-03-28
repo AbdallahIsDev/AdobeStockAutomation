@@ -1,477 +1,486 @@
 # STOCK SUCCESS REPORT
-## How Top Contributors Dominate Adobe Stock in 2026
+## Adobe Stock Commercial Reference for 2026
 
-> Strategic reference for the Adobe Stock Automation System. All four execution files depend on this document. Read it fully before any stage runs.
+> Strategic reference for the Adobe Stock Automation System. Read this file fully before running any stage. Use it as the commercial standard for trend selection, image quality, metadata quality, and portfolio decisions.
 
 ---
 
-## CHAPTER 1 — WHO TOP EARNERS ARE & HOW THEY OPERATE
+## 1. HOW TO USE THIS REPORT
 
-### 1.1 The Mindset
+Use this report for four decisions only:
 
-Top earners treat stock contribution as a data-driven business. They spend 20% of their time on image creation and 80% on metadata, trend research, and portfolio strategy.
+1. Decide whether a concept is commercially worth producing.
+2. Decide whether an image is strong enough to upload.
+3. Decide how metadata should be written.
+4. Decide how to improve weak assets and weak niches over time.
 
-### 1.2 Top-Performing Niches (ranked by earnings per accepted image)
+Execution files should not repeat this logic. They should apply it.
+
+---
+
+## 2. TOP CONTRIBUTOR OPERATING MODEL
+
+### 2.1 Core mindset
+
+Top earners treat stock as a commercial system, not an art gallery.
+
+- about 20% of effort goes into image creation
+- about 80% goes into research, metadata, portfolio structure, and optimization
+
+### 2.2 What top earners optimize for
+
+- buyer demand, not creator preference
+- repeatable niches, not random uploads
+- low rejection rate, not upload volume alone
+- strong metadata, not image quality alone
+- portfolio depth inside proven topics, not shallow variety everywhere
+
+### 2.3 Rejection-rate target
+
+Keep rejection rate under 8%.
+
+Every rejection costs:
+
+- zero revenue from that asset
+- lower contributor trust and discoverability
+- wasted generation, upscale, and metadata time
+
+### 2.4 Pre-submission quality gate
+
+Technical:
+
+- minimum 4MP, preferably 12MP+
+- no noise, compression artifacts, chromatic aberration, or distortion
+- no blown highlights or crushed blacks
+- subject is sharp
+- no watermark, logo, or copyrighted material
+
+Commercial:
+
+- clear buyer use case
+- clean composition
+- no distracting background clutter
+- no trademark risk
+- obvious licensing intent for marketing, editorial, presentation, or web use
+
+---
+
+## 3. WHAT SELLS
+
+### 3.1 Top-performing niches
 
 | Rank | Niche | Why It Converts |
 |---|---|---|
-| 1 | AI & Human Technology Interaction | Daily demand from tech, media, and B2B brands |
-| 2 | Diverse Authentic People (no posed smiles) | Advertising, healthcare, education, HR |
-| 3 | Sustainable Tech & Green Energy | ESG mandates driving corporate visual demand |
-| 4 | Mental Health & Emotional Wellness | Healthcare, therapy, insurance, pharma |
-| 5 | Remote Work & Hybrid Office | Evergreen post-2020 shift |
-| 6 | Fintech & Digital Finance | Banking, insurance, investment app advertising |
-| 7 | Healthcare Diversity & Inclusion | Hospitals, pharma, health insurance |
-| 8 | Data, Analytics & Business Intelligence | Enterprise software, SaaS, consulting |
-| 9 | Climate Change Impact & Response | Media, NGOs, government |
-| 10 | Gen Z & Millennial Lifestyle Authenticity | Consumer brands, tech, social platforms |
+| 1 | AI and human technology interaction | Tech, media, SaaS, enterprise marketing |
+| 2 | Diverse authentic people | Advertising, healthcare, education, HR |
+| 3 | Sustainable tech and green energy | ESG, policy, infrastructure, corporate reports |
+| 4 | Mental health and emotional wellness | Therapy, healthcare, insurance, pharma |
+| 5 | Remote work and hybrid office | Evergreen workplace demand |
+| 6 | Fintech and digital finance | Banking, investment, insurance, apps |
+| 7 | Healthcare diversity and inclusion | Hospitals, public health, pharma |
+| 8 | Data, analytics, and business intelligence | SaaS, dashboards, consulting |
+| 9 | Climate change response | Media, NGOs, government |
+| 10 | Gen Z and millennial authenticity | Consumer brands, social, lifestyle |
 
-### 1.3 Rejection Rate: Keep It Under 8%
+### 3.2 Buyer-first test
 
-Every rejection has three costs: the asset earns nothing, high rejection rates lower the contributor quality score (reducing visibility of accepted assets), and rejected images waste production time.
+Never ask: "Is this a good image?"
 
-Pre-submission checklist:
-```
-Technical:
-☐ Resolution minimum 4MP (ideally 12MP+)
-☐ No compression artifacts, chromatic aberration, or lens distortion
-☐ Proper exposure — no blown highlights, no crushed blacks
-☐ Sharp focus on primary subject
-☐ No watermarks, logos, or copyrighted material
+Always ask:
 
-Commercial:
-☐ Clear commercial use case
-☐ No trademarks visible
-☐ Clean composition — no distracting background elements
-☐ Strong buyer intent — a real buyer can picture using this in a campaign
-```
+- who would license this
+- for what exact use
+- what search terms would they use
+- why would they choose this over the existing top results
 
----
+### 3.3 What makes an image high-value
 
-## CHAPTER 2 — IDENTIFYING HIGH-VALUE IMAGES
+An image is high-value when it has all four:
 
-### 2.1 The Buyer-First Question
+1. Versatility
+   It works in banner, square, and presentation crops.
+2. Emotional clarity
+   It communicates a feeling or message, not just a subject.
+3. Current-but-evergreen relevance
+   It feels modern without expiring immediately.
+4. Clean execution
+   It is ready for commercial use without repair.
 
-Never ask "Is this a good photo?" Ask: "Which specific buyer would license this, for which specific use, and would they pay for it when searching Adobe Stock?"
+### 3.4 Low-value images to avoid
 
-Key buyer types: B2B marketing managers, healthcare communicators, editorial designers, UX/product designers, small business owners, social media managers, government/NGO communicators.
+- generic landscapes with no commercial hook
+- forced corporate smiles and posed stock cliches
+- weak food styling
+- oversupplied beauty-without-purpose images
+- low-resolution AI images not properly upscaled
+- seasonal images uploaded too late
 
-### 2.2 What Makes an Image High-Value
+### 3.5 Gap-analysis method
 
-An image scores high when it has all four:
+For any niche:
 
-1. **Versatility** — can be cropped and used across formats (banner, square social, vertical mobile)
-2. **Emotional resonance** — communicates something the buyer's audience feels, not just sees
-3. **Current + evergreen balance** — modern aesthetics without hyper-trendy elements that date in 12 months
-4. **Clean execution** — sharp, well-lit, properly composed, no distracting elements
+1. search Adobe Stock
+2. sort by most popular
+3. study the top 20 results
+4. note composition, lighting, demographics, palette, and tone
+5. identify what is missing
+6. produce the gap, not the saturated default
 
-### 2.3 Low-Value Images to Avoid
+### 3.6 Early velocity signal
 
-- Generic sunsets/landscapes with no people or context
-- Posed "happy office workers" clichés
-- Unstyled food photography
-- Seasonal content uploaded late (must be 90–120 days ahead)
-- Images where the background competes with the subject
-- Low-resolution AI images without upscaling
+- one license in the first 30 days is a strong positive signal
+- zero downloads after 60 days means fix metadata first
+- zero downloads after 90 days usually means stop investing in that asset
 
-### 2.4 Top Seller Analysis Method
+Fix order:
 
-Search Adobe Stock for your target topic → sort by "Most Popular" → study the top 20 results (composition, lighting, demographics, color palette) → identify what's missing → create for the gap, not for the already-saturated look.
-
-### 2.5 Early Velocity Signal
-
-Images that get at least one license in the first 30 days have dramatically higher lifetime earnings. Zero downloads after 60 days: fix keywords first, then title, then category. If still zero after 90 days, move on.
-
----
-
-## CHAPTER 3 — HOW THE ALGORITHM WORKS
-
-### 3.1 Metadata-First Ranking
-
-Adobe Stock's algorithm is text-driven, not image-recognition-driven. Ranking factors in order:
-
-```
-Title text                 ← highest weight
-First 10 keywords          ← very high weight
-Keywords 11–35             ← medium weight
-Category                   ← medium weight
-Sales velocity             ← high weight
-Contributor rank score     ← medium weight
-Image age decay            ← low weight
-```
-
-### 3.2 Title Weight
-
-The title is the single highest-weighted field. It also becomes part of the image URL, which gets indexed by Google Image Search and Bing — creating external organic traffic beyond Adobe's platform.
-
-**Title Formula:**
-
-```
-[Primary Subject] + [Action/State] + [Setting/Context] + [Mood/Style]
-Max 70 characters. No punctuation except commas. No "stock photo of" prefix.
-
-BAD:  "Stock photo of people in an office"         (21 chars, weak, generic)
-BAD:  "Happy diverse business team smiling together" (too cliché)
-GOOD: "Diverse professionals collaborating on AI project in modern office"  (63 chars ✓)
-GOOD: "Young woman analyzing financial data on glowing digital screen"       (62 chars ✓)
-```
-
-### 3.3 Keyword Strategy — The Full 2026 Guide
-
-Keywords are the foundation of discoverability. Adobe Stock accepts up to 50 keywords per image, but the optimum range for top sellers is **25–35 keywords**. Adding irrelevant keywords to hit 50 actively hurts ranking (dilution penalty).
-
-#### Keyword Architecture (hierarchical structure)
-
-```
-POSITIONS 1–3: Primary subject keywords (most buyer-intent, most specific)
-  → These get the heaviest weighting
-  → Example: "AI financial analyst", "diverse remote work team", "green energy engineer"
-
-POSITIONS 4–7: Long-tail conceptual phrases
-  → 3–5 word phrases matching how buyers actually search
-  → Example: "woman using laptop at home office", "solar panel installation worker"
-
-POSITIONS 8–12: Secondary descriptive keywords
-  → Setting, action, mood, style
-  → Example: "modern office", "focused concentration", "teamwork collaboration"
-
-POSITIONS 13–20: Emotional & conceptual keywords
-  → What the image MEANS, not just what it shows
-  → Example: "innovation", "success", "empowerment", "sustainability", "future technology"
-
-POSITIONS 21–28: Technical / format descriptors
-  → Composition, color, demographic details
-  → Example: "shallow depth of field", "warm tones", "horizontal banner", "close-up portrait"
-
-POSITIONS 29–35: Industry & use-case tags
-  → Which industries will buy this, what will they use it for
-  → Example: "healthcare marketing", "tech startup advertising", "business presentation"
-```
-
-#### Keyword Rules — What to Do
-
-```
-✓ Use singular nouns where possible (algorithm prefers "woman" over "women")
-✓ Include the dominant color palette if commercially distinctive
-✓ Include the emotion the image communicates
-✓ Include the industry most likely to buy it
-✓ Include the setting (indoor, outdoor, studio, urban, nature)
-✓ Include the demographic (age range, gender if clearly visible, ethnicity if relevant)
-✓ Include action verbs describing what is happening
-✓ Include the mood/lighting style (cinematic, bright, dramatic, soft)
-✓ Include both the literal AND the metaphorical meaning
-✓ Think like 5 different buyers searching for 5 different things — cover all 5
-```
-
-#### Keyword Rules — What to Avoid
-
-```
-✗ Never repeat the same word in multiple keywords (wastes positions)
-✗ Never add competitor platform names (Shutterstock, Getty) as keywords
-✗ Never use misleading keywords that don't match the image
-✗ Never use celebrity names or branded product names
-✗ Never use location-specific names unless it's a genuinely unique iconic location
-✗ Never use the word "photo" or "image" or "stock" as a keyword
-✗ Never add keywords just to reach a count — quality beats quantity
-✗ Avoid overly generic single words in the first 10 positions ("blue", "happy", "man")
-```
-
-**How to build a title (6 steps):**
-```
-STEP 1: Identify the primary subject
-  → What is the most important visual element?
-  → What would a buyer type first in a search?
-
-STEP 2: Add the action or state
-  → What is the subject doing or being?
-  → Result: [primary subject] + [action/state]
-
-STEP 3: Add the context or setting
-  → Where is this? What industry/environment?
-  → Result: [primary subject] + [action] + [setting]
-
-STEP 4: Add a differentiating modifier
-  → What makes this image specifically valuable?
-  → Diverse? Modern? Authentic? Conceptual?
-  → Result: [modifier] + [primary subject] + [action] + [setting]
-
-STEP 5: Check character count (must be under 70)
-  → If over 70, remove the least important modifier
-  → Never cut the primary subject or key commercial term
-
-STEP 6: Check buyer intent
-  → Would a marketing manager click this title?
-  → Would a healthcare communicator recognize it as relevant?
-  → If yes → done. If no → revise.
-```
-
-**Formula:** `[Subject] + [Action/State] + [Setting] + [Modifier]` — max 70 chars, no punctuation except commas, no "stock photo of" prefix.
-
-Bad vs good examples:
-```
-BAD:  "Stock photo of people in an office"          (weak, generic)
-BAD:  "Happy diverse business team smiling"          (cliché)
-GOOD: "Diverse professionals collaborating on AI project in modern office"  (63 chars ✓)
-GOOD: "Young woman analyzing financial data on glowing digital screen"       (62 chars ✓)
-```
-
-**Title patterns by category:**
-```
-Technology:  "[Diverse/Young] [professional] using [technology] in [modern setting]"
-             Example: "Young professional using AI interface in modern tech office"
-
-Finance:     "[Concept] [action] showing [outcome], [style]"
-             Example: "Digital financial data analysis on glowing screen, business concept"
-
-Healthcare:  "[Demographic] [professional/patient interaction] in [setting]"
-             Example: "Female doctor consulting diverse patient in bright clinic"
-
-Lifestyle:   "[Person] [activity] in [authentic setting], [mood]"
-             Example: "Woman meditating in sunlit minimal apartment, peaceful morning"
-
-Conceptual:  "[Abstract concept] [visual metaphor], [commercial application]"
-             Example: "Global connectivity network concept, business communication background"
-```
-
-### 3.3 Keyword Strategy
-
-Optimal range: **25–35 keywords**. Adding irrelevant keywords to reach 50 causes a dilution penalty. Quality beats quantity.
-
-**Full 35-keyword slot blueprint (fill each slot deliberately):**
-
-```
-Slot 1:  [Most specific buyer-intent phrase — 3–4 words]
-Slot 2:  [Second specific buyer-intent phrase — different angle]
-Slot 3:  [Third specific buyer-intent phrase — industry-specific]
-Slot 4:  [Long-tail conceptual phrase — what the image MEANS]
-Slot 5:  [Long-tail use-case phrase — where buyers will use it]
-Slot 6:  [Primary subject — singular noun]
-Slot 7:  [Secondary subject — singular noun]
-Slot 8:  [Main action — present participle verb]
-Slot 9:  [Setting/environment]
-Slot 10: [Time of day or lighting condition]
-Slot 11: [Mood/emotion]
-Slot 12: [Composition style]
-Slot 13: [Color palette descriptor]
-Slot 14: [Industry 1]
-Slot 15: [Industry 2]
-Slot 16: [Demographic — age range]
-Slot 17: [Demographic — gender if relevant]
-Slot 18: [Demographic — diversity/ethnicity if clearly visible]
-Slot 19: [Abstract concept 1]
-Slot 20: [Abstract concept 2]
-Slot 21: [Abstract concept 3]
-Slot 22: [Commercial use 1 — e.g., "website banner"]
-Slot 23: [Commercial use 2 — e.g., "business presentation"]
-Slot 24: [Technology/tool shown if relevant]
-Slot 25: [Trend alignment — aligns with Adobe Creative Trend]
-Slot 26: [Seasonal/cultural relevance if applicable]
-Slot 27: [Related concept buyers frequently pair with this topic]
-Slot 28: [Antonym/contrast — e.g., "stress" for a calm image, captures comparison buyers]
-Slot 29: [Camera/style descriptor]
-Slot 30: [Format suitability — "horizontal", "square", "portrait"]
-Slot 31: [Country/region if visually implied — skip if neutral]
-Slot 32: [Sub-niche keyword not yet covered]
-Slot 33: [Emotional outcome for the buyer's audience]
-Slot 34: [Adjacent industry that might also buy this]
-Slot 35: [Future-oriented concept — where this topic is heading]
-```
-
-**Keyword rules — what to do:**
-```
-✓ Use singular nouns where possible ("woman" outperforms "women" algorithmically)
-✓ Include the dominant color palette if commercially distinctive
-✓ Include the emotion the image communicates
-✓ Include the industry most likely to buy it
-✓ Include the setting (indoor, outdoor, studio, urban, nature)
-✓ Include the demographic (age range, gender, ethnicity if clearly visible)
-✓ Include action verbs describing what is happening
-✓ Include mood/lighting style (cinematic, bright, dramatic, soft)
-✓ Include both the literal AND the metaphorical meaning
-✓ Think like 5 different buyers with 5 different search queries — cover all 5
-```
-
-**Keyword rules — what to avoid:**
-```
-✗ Never repeat the same word across keyword slots (wastes positions)
-✗ Never use competitor platform names (Shutterstock, Getty) as keywords
-✗ Never use misleading keywords that don't match the image
-✗ Never use celebrity names or branded product names
-✗ Never use location-specific names unless a genuinely iconic landmark
-✗ Never use the words "photo", "image", or "stock" as keywords
-✗ Never add keywords just to hit a count target
-✗ Avoid overly generic single words in positions 1–10 ("blue", "happy", "man")
-```
-
+1. keywords
+2. title
+3. category
+4. replace the asset if it still fails
 
 ---
 
-## CHAPTER 4 — METADATA OPTIMIZATION
+## 4. HOW ADOBE STOCK RANKS IMAGES
 
-### 4.1 AI Disclosure Rules
+### 4.1 Metadata-first ranking
 
-```
-✓ Check "Created using generative AI tools" for ALL AI-generated images
-✓ For real photographs: UNCHECK the AI box
-✓ "People and Property are fictional" must be selected for any AI image
-  containing faces, recognizable buildings, or trademarked logos
-```
+Adobe Stock ranking is primarily text-driven.
 
-### 4.2 File Type Selection
+Ranking priority:
 
-- **Photos**: photorealistic images, AI images that look photographic, lifestyle, people, nature
-- **Illustrations**: digital art, clearly illustrated style, abstract with illustrated aesthetic
-- Wrong file type reduces category relevance score. When in doubt for AI: photorealistic → Photos; painterly → Illustrations.
+1. title
+2. first 10 keywords
+3. keywords 11-35
+4. category
+5. sales velocity
+6. contributor quality
+7. age decay
 
+### 4.2 Title rules
 
+The title is the single most important metadata field.
+
+Use this formula:
+
+`[Primary subject] + [Action or state] + [Setting or context] + [Differentiator]`
+
+Rules:
+
+- preferred length under 70 characters
+- reads naturally
+- lead with the subject and commercial meaning
+- no "stock photo of"
+- no filler words
+- no keyword stuffing
+
+Examples:
+
+- Bad: `Stock photo of people in an office`
+- Bad: `Happy diverse business team smiling`
+- Good: `Diverse professionals collaborating on AI project in modern office`
+- Good: `Young woman analyzing financial data on glowing digital screen`
+
+### 4.3 Keyword system
+
+Best range: 25-35 keywords.
+
+More keywords do not help if they are weak. Irrelevant expansion causes dilution.
+
+#### Positions that matter most
+
+- 1-3: highest-intent buyer phrases
+- 4-7: long-tail commercial phrases
+- 8-12: setting, action, mood, style
+- 13-20: concepts and meaning
+- 21-28: technical and format descriptors
+- 29-35: industry and use-case tags
+
+#### 35-slot blueprint
+
+| Slots | Purpose |
+|---|---|
+| 1-3 | Specific buyer-intent phrases |
+| 4-5 | Concept and use-case phrases |
+| 6-7 | Primary and secondary subject nouns |
+| 8-10 | Action, setting, lighting |
+| 11-13 | Mood, composition, color palette |
+| 14-18 | Industry and demographic tags |
+| 19-21 | Abstract concepts |
+| 22-24 | Commercial usage contexts |
+| 25-28 | Trend alignment, seasonal relevance, adjacent concept, contrast |
+| 29-31 | Camera/style, format, region if truly relevant |
+| 32-35 | Sub-niche, emotional outcome, adjacent buyer vertical, future-facing concept |
+
+#### Keyword rules
+
+Do:
+
+- use singular nouns where possible
+- include subject, action, setting, mood, and commercial meaning
+- include demographic and industry when clearly relevant
+- include both literal and conceptual interpretations
+- think like multiple buyer types, not one creator view
+
+Avoid:
+
+- repeated words
+- misleading terms
+- celebrity names, brands, trademarks
+- platform names
+- generic filler in the first 10 slots
+- keywords added only to hit a count target
+- the words `photo`, `image`, or `stock`
+
+### 4.4 Category rules
+
+Use the most specific category that matches the buyer's likely search intent.
+
+Wrong category reduces relevance even when title and keywords are strong.
 
 ---
 
-## CHAPTER 5 — COMMERCIAL STRATEGIES
+## 5. METADATA QUALITY STANDARD
 
-### 5.1 Seasonal Content Calendar
+### 5.1 File type
 
-Upload seasonal content **90–120 days in advance**.
+- `Photos` for photorealistic images, including photorealistic AI
+- `Illustrations` for clearly illustrated, painterly, or graphic work
+
+### 5.2 AI disclosure
+
+For AI-generated images:
+
+- always mark as created with generative AI
+- mark people/property fictional when applicable
+
+For real photos:
+
+- do not check the AI box
+
+### 5.3 Metadata pass/fail standard
+
+Title passes when:
+
+- under 70 characters preferred
+- specific, natural, and commercially clear
+- includes subject + context + differentiator
+
+Keywords pass when:
+
+- 25-35 strong terms
+- slots 1-10 contain real buyer phrases
+- no duplication or weak filler
+
+Category passes when:
+
+- it matches the strongest buyer use case
+
+### 5.4 Metadata QA checklist
+
+- title is natural and commercially specific
+- first 10 keywords are strong search phrases
+- keyword count is in the target range
+- category is the most specific valid option
+- AI disclosure is correct
+
+---
+
+## 6. COMMERCIAL PORTFOLIO STRATEGY
+
+### 6.1 Evergreen vs trending split
+
+Use:
+
+- 70% evergreen
+- 30% trend-aligned
+
+Evergreen gives income stability.
+Trending gives search spikes and portfolio growth.
+
+### 6.2 Seasonal timing
+
+Upload seasonal content 90-120 days early.
 
 | Upload Window | Target Content |
 |---|---|
-| September–October | Christmas, Hanukkah, New Year |
-| November–December | Valentine's Day, Spring |
-| January–February | Easter, Earth Day, graduation |
-| March–April | Summer, Father's Day, Independence Day |
-| May–June | Back to school, Halloween planning |
-| July–August | Thanksgiving, Black Friday, year-end business |
+| September-October | Christmas, Hanukkah, New Year |
+| November-December | Valentine's Day, Spring |
+| January-February | Easter, Earth Day, graduation |
+| March-April | Summer, Father's Day, Independence Day |
+| May-June | Back to school, Halloween planning |
+| July-August | Thanksgiving, Black Friday, year-end business |
 
-### 5.2 Evergreen / Trending Split
+### 6.3 Series strategy
 
-70% evergreen (diverse professionals, healthcare, tech concepts, wellness, business communication) + 30% trend-aligned (specific AI visuals, current economic concepts, emerging tech). Evergreen protects income stability; trending captures search velocity spikes.
+Series outperform isolated one-offs.
 
-### 5.3 Series Strategy
+Benefits:
 
-Create series of 5–20 images per concept session. Benefits: cross-promotion via Adobe's "similar images" engine, buyers license 2–5 from the same series, fills niche depth faster, and builds a recognizable portfolio brand.
+- similar-images engine cross-promotion
+- buyers often license multiple variants
+- faster niche depth
+- better portfolio consistency
 
-Recommended structures:
-- 1 wide establishing shot + 1 close-up + 1 overhead + 1 portrait variant — covers all buyer crop needs
-- Same concept, 3 different demographic groups — inclusive buyer coverage
-- Same subject, 3 different moods (optimistic, focused, concerned) — editorial versatility
+Recommended series structure:
 
----
+- 1 wide establishing shot
+- 1 close-up
+- 1 overhead or flat-lay
+- 1 portrait or mood variant
 
-## CHAPTER 6 — AI CONTENT STRATEGY
+Also valuable:
 
-### 6.1 High-Converting AI Image Types
-
-```
-✓ Conceptual business: data, AI, network, blockchain
-✓ Futuristic tech environments: smart cities, AR interfaces, robotics
-✓ Diverse professionals in neutral settings (no AI face artifacts)
-✓ Environmental and climate concept imagery
-✓ Medical and scientific visualization
-✓ Financial and economic concept illustrations
-✓ Minimal flat-lay and overhead compositions
-```
-
-### 6.2 Low-Converting AI Image Types
-
-```
-✗ Photorealistic faces with uncanny valley artifacts
-✗ Text within images (AI text is poorly rendered, causes rejection)
-✗ Complex multi-person scenes (hand/finger artifacts)
-✗ Generic nature (massively oversupplied by photographers)
-✗ Overly obvious AI aesthetic
-```
-
-### 6.3 AI Quality Checklist
-
-```
-☐ No extra fingers, hands, or limbs
-☐ No face merging or distortion
-☐ No text artifacts (illegible or broken text)
-☐ No floating or disconnected objects
-☐ No anatomically impossible postures
-☐ No visible AI platform watermarks
-☐ Upscaled to minimum 4MP (2K minimum, 4K preferred)
-☐ sRGB color profile
-☐ No blown highlights or crushed blacks from upscaling
-```
-
-### 6.4 Aspect Ratio Guide
-
-```
-16:9 — website heroes, presentation backgrounds, banner ads → highest B2B buyer demand
-1:1  — Instagram, LinkedIn, app thumbnails → second-highest demand
-```
-
-Always create each concept in both 16:9 and 1:1 — doubles uploadable assets per concept.
+- same concept with multiple demographics
+- same concept with multiple emotional tones
 
 ---
 
-## CHAPTER 7 — TRACKING & OPTIMIZATION
+## 7. AI IMAGE STRATEGY
 
-### 7.1 Metrics to Track
+### 7.1 High-converting AI image types
 
-```
-Weekly:  total downloads, rejection rate (target <8%), top 5 earners this week
-Monthly: earnings per accepted image (total earnings ÷ accepted assets), category performance
-Quarterly: portfolio growth vs 2,000-asset goal, niche performance review, static cache refresh
-```
+- conceptual business visuals
+- data, analytics, network, and finance concepts
+- futuristic tech environments
+- diverse professionals in clean realistic settings
+- environmental and climate concepts
+- medical and scientific visual concepts
+- minimal flat-lays and overhead compositions
 
-### 7.2 Optimization Loop
+### 7.2 Low-converting AI image types
 
-```
-Weeks 1–2: Upload → track early velocity
-Weeks 3–4: Identify zero-download images
-Month 2:   Fix keywords → fix title → fix category → if still zero at 90 days, replace
-Month 3+:  Create more of what converted; stop creating what didn't
-```
+- uncanny faces
+- broken text inside images
+- complex crowded scenes with hand or anatomy errors
+- generic nature with no commercial distinction
+- obvious "AI look" with weak realism
 
----
+### 7.3 AI quality checklist
 
-## CHAPTER 8 — QUICK REFERENCE
+- no extra fingers, limbs, or merged anatomy
+- no face distortion
+- no illegible text artifacts
+- no floating or disconnected objects
+- no impossible body posture
+- no watermark
+- properly upscaled
+- clean exposure and color
 
-### Image Quality Check (60 seconds)
+### 7.4 Aspect ratio priorities
 
-```
-Technical:
-☐ Sharp focus on primary subject
-☐ No artifacts, noise, or distortion
-☐ Good exposure
-☐ Minimum 4MP
-☐ No watermarks, logos, copyrighted elements
+- `16:9` for website heroes, banners, slides, B2B headers
+- `1:1` for social, thumbnails, and app surfaces
 
-Commercial:
-☐ Can I name a specific buyer for this?
-☐ Clean composition, usable without retouching?
-☐ Avoids clichéd stock tropes?
-☐ Would I pay $10 to license this myself?
-```
-
-### Metadata Quality Check
-
-```
-Title:    under 70 chars | subject + context + differentiator | reads naturally | no clichés
-Keywords: 25–35 total | positions 1–7 are specific 3–5 word buyer phrases | no redundant words
-Category: most specific available | matches primary buyer type
-AI:       box checked if AI-generated | fictional box checked for AI with people/property
-```
+Always build both when possible. This increases output value per concept.
 
 ---
 
-## CHAPTER 9 — COMMON MISTAKES
+## 8. TRACKING AND OPTIMIZATION
+
+### 8.1 Metrics to track
+
+Weekly:
+
+- total downloads
+- rejection rate
+- top 5 earners
+
+Monthly:
+
+- earnings per accepted image
+- category performance
+- niche performance
+
+Quarterly:
+
+- portfolio growth vs target
+- static cache refresh
+- trend and niche rebalance
+
+### 8.2 Optimization loop
+
+Weeks 1-2:
+
+- upload
+- watch for early velocity
+
+Weeks 3-4:
+
+- identify zero-download assets
+
+Month 2:
+
+- fix keywords
+- fix title
+- fix category
+
+Month 3+:
+
+- create more of what converts
+- stop investing in what repeatedly fails
+
+---
+
+## 9. QUICK CHECKLISTS
+
+### 9.1 Image quality check
+
+- sharp subject
+- no artifacts
+- good exposure
+- minimum size met
+- no legal/trademark issues
+- clear buyer use case
+- commercially usable composition
+
+### 9.2 Metadata quality check
+
+- title under 70 chars preferred
+- title includes subject + context + differentiator
+- 25-35 keywords
+- first 7-10 keywords are strong buyer phrases
+- category is specific
+- AI disclosure is correct
+
+### 9.3 Upload decision
+
+Upload only if all are true:
+
+- technically clean
+- commercially clear
+- metadata complete
+- niche fits portfolio strategy
+- not a duplicate of a stronger existing asset
+
+---
+
+## 10. COMMON MISTAKES
 
 | Mistake | Fix |
 |---|---|
-| Metadata incomplete before submission | Complete all fields before clicking submit |
-| Generic single words in keyword slots 1–10 | Slots 1–10 must be 3–5 word buyer phrases |
-| Title over 70 characters | Edit without losing key commercial terms |
-| Wrong category | Research what top sellers in your niche use |
-| Not disclosing AI generation | Always disclose, no exceptions |
-| Duplicate submissions | Check before every upload batch |
-| Seasonal content uploaded too late | Upload 90–120 days before target season |
-| Upload inactivity gaps | Upload at least one batch per week to maintain rank |
-| Text artifacts in AI images | Inspect at 100% zoom before submission |
-| Same metadata for 16:9 and 1:1 versions | Write unique title/keywords for each ratio |
+| Weak generic titles | Rewrite with subject + context + differentiator |
+| Generic words in keyword slots 1-10 | Replace with buyer-intent phrases |
+| Wrong category | Match top-seller category patterns in the niche |
+| Late seasonal uploads | Move production 90-120 days earlier |
+| AI disclosure missing | Always disclose AI content correctly |
+| Duplicate uploads with near-identical metadata | Differentiate variants deliberately |
+| Uploading weak AI faces or text artifacts | Reject internally before Adobe does |
+| Using the same metadata for every ratio/variant | Customize title and keyword emphasis per asset |
+| Producing random topics without niche depth | Build depth inside proven converting categories |
 
 ---
 
-*Version 2026.1 — Update quarterly alongside static_knowledge_cache.json refresh.*
+## 11. OPERATING DEFAULTS
+
+Use these defaults unless a stage has a stronger reason not to:
+
+- prioritize buyer intent over visual novelty
+- choose clean commercial realism over artistic complexity
+- prefer metadata precision over keyword volume
+- favor proven niches over random experimentation
+- treat every upload as part of a structured portfolio, not a standalone post
+
+---
+
+*Version 2026.2 — keep aligned with workflow files and static cache refreshes.*
