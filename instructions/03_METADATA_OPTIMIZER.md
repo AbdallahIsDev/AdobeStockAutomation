@@ -1,16 +1,17 @@
 # 03_METADATA_OPTIMIZER.md
-
 ## Adobe Stock Metadata Application Agent
-
 ### Adobe Stock Automation System · Part 3 of 3
 
 ---
 
 ## SYSTEM OVERVIEW
 
-This file governs the **final metadata pipeline**: opening each uploaded image on Adobe Stock's contributor portal, loading its pre-written metadata from the `.metadata.json` sidecar file created by Sub-Agent D (file 01_TREND_RESEARCH_AND_IMAGE_CREATION.md), applying every field to the correct form element, and saving the image in a ready-to-submit state. The user reviews and submits manually.
+This file governs the **final metadata pipeline**: opening each uploaded image on Adobe Stock's contributor portal, loading its pre-written metadata from the `.metadata.json` sidecar file, applying every field to the correct form element, and saving the image in a ready-to-submit state. The user reviews and submits manually.
 
-**This agent is a fast, reliable APPLIER — not an analyser.** All metadata was written at image creation time with full context. This agent's job is to match, load, verify, and apply — not to think about what the keywords should be.
+**Source of truth for images:** `image_registry.json` at `PROJECT_ROOT\data\image_registry.json`
+This registry (managed by FILE_02) tracks every image in the system, including its `upscaled_path` — the path to the 4K version in `downloads\upscaled\`. When a user uploads an image to Adobe Stock, FILE_03 matches the Adobe Stock "Original name(s)" field back to the registry to find the correct sidecar.
+
+**This agent is a fast, reliable APPLIER — not an analyser.** All metadata was written at image creation time (Sub-Agent D for AI images) or will be generated during this step (manually added images with stub sidecars). This agent's job is to match, load, verify, and apply.
 
 ---
 
@@ -19,11 +20,10 @@ This file governs the **final metadata pipeline**: opening each uploaded image o
 **Before executing ANY step — the agent MUST read:**
 
 ```
-C:\AdobeStockAutomation\data\STOCK_SUCCESS_REPORT.md
+PROJECT_ROOT\instructions\STOCK_SUCCESS_REPORT.md
 ```
 
 This gives the agent the full context needed to:
-
 - Detect weak metadata on previously uploaded (non-automated) images
 - Rewrite titles and keywords to the correct standard when needed
 - Understand which categories, niches, and keyword structures perform best
@@ -47,18 +47,34 @@ https://contributor.stock.adobe.com/en/uploads
 ### Two Types of Images in the Queue
 
 ```
-TYPE A — Automated images (created by FILE_01):
-  → These have a .metadata.json sidecar file
-  → Matched by filename shown in the Adobe Stock right panel
-  → Agent loads the sidecar and applies it — fast and deterministic
-  → Quick visual sanity check only (5 seconds)
+TYPE A — Automated images (created by file instructions\01_TREND_RESEARCH_AND_IMAGE_CREATION.md, upscaled by file instructions\02_IMAGE_UPSCALER.md):
+  → Have a complete .metadata.json sidecar (written by Sub-Agent D at creation time)
+  → Sidecar status: "ready_for_upload" or "applied_to_adobe_stock": false
+  → Matched via image_registry.json → upscaled_path → load sidecar from same folder
+  → Quick visual sanity check only (5 seconds) → apply all fields → save
 
-TYPE B — Previously uploaded images (uploaded manually by user):
-  → No sidecar file exists
-  → Agent reads the current metadata on Adobe Stock
-  → Evaluates it against STOCK_SUCCESS_REPORT.md standards
-  → Leaves it untouched if it already meets the standard
-  → Rewrites/completes it if weak, missing, or inconsistent
+TYPE B — Manually added images (dropped in downloads\manual\, upscaled by FILE_02):
+  → Have a stub .metadata.json sidecar (written by FILE_02 Sub-Agent E)
+  → Sidecar status: "stub_created_pending_review"
+  → No generation context, no pre-written title or keywords
+  → Agent performs full visual analysis + applies STOCK_SUCCESS_REPORT.md standards
+  → Rewrites the stub completely → applies → saves
+```
+
+### How to Find the Sidecar for Any Uploaded Image
+
+```
+When Adobe Stock shows "File ID(s): XXXXXX - Original name(s): [filename]":
+
+STEP 1: Read the original filename from that text
+STEP 2: Look up filename (without extension) in image_registry.json
+STEP 3: Read the "upscaled_path" field from the registry entry
+        Example: "downloads\\upscaled\\2026-03-23\\ai_finance_16A_establishing_L1_001_20260323.png"
+STEP 4: Sidecar is at same path with .metadata.json extension:
+        "downloads\\upscaled\\2026-03-23\\ai_finance_16A_establishing_L1_001_20260323.metadata.json"
+STEP 5: Load the sidecar and check its "status" field:
+        "ready_for_upload" → TYPE A (complete metadata, apply directly)
+        "stub_created_pending_review" → TYPE B (incomplete, rewrite needed)
 ```
 
 ---
@@ -87,7 +103,7 @@ After connecting:
 ### Selector Registry
 
 ```
-Selectors file: C:\AdobeStockAutomation\data\adobe_stock_selectors.json
+Selectors file: PROJECT_ROOT\data\adobe_stock_selectors.json
 
 This is SEPARATE from selectors_registry.json (which is for Google Flow).
 Adobe Stock is a different site — it has its own selector registry.
@@ -320,11 +336,18 @@ STEP 2 — READ THE ORIGINAL FILENAME
   → Read: "File ID(s): XXXXXXXXX - Original name(s): [filename]"
   → Extract the original filename (e.g., ai_finance_16A_establishing_L1_001_20260323.png)
 
-STEP 3 — DETERMINE IMAGE TYPE
-  → Does a .metadata.json sidecar exist for this filename?
-  → Check: C:\AdobeStockAutomation\downloads\**\[filename_without_ext].metadata.json
-  → If sidecar EXISTS → TYPE A (automated image) → follow Section 3.2
-  → If sidecar DOES NOT EXIST → TYPE B (previously uploaded image) → follow Section 3.3
+STEP 3 — DETERMINE IMAGE TYPE via image_registry.json
+  → Load image_registry.json (C:\AdobeStockAutomation\data\image_registry.json)
+  → Look up the filename (without extension) as a key in the registry
+  → If registry entry EXISTS:
+      → Read "upscaled_path" from registry entry
+      → Locate sidecar: [upscaled_path_dir]\[filename_without_ext].metadata.json
+      → Load sidecar → read "status" field:
+          "ready_for_upload"             → TYPE A (complete sidecar) → follow Section 3.2
+          "stub_created_pending_review"  → TYPE B (stub sidecar, manual image) → follow Section 3.3
+  → If registry entry DOES NOT EXIST:
+      → Image was uploaded outside the automation system (old manual upload)
+      → Treat as TYPE B → follow Section 3.3 (visual analysis, no sidecar available)
 ```
 
 ---
@@ -377,7 +400,7 @@ STEP 3 — APPLY ALL METADATA FIELDS (in this exact order)
       → If already checked → verify the fictional checkbox also appeared below
 
   3e. PEOPLE AND PROPERTY ARE FICTIONAL CHECKBOX
-      → This appears below the AI checkbox after "Created using generative AI tools" is checked
+      → This appears below the AI checkbox after it is checked
       → Check if it is already checked
       → If NOT checked → click it to check it
       → Wait 300ms → verify the "Recognizable people or property?" Yes/No selector has disappeared
@@ -524,22 +547,20 @@ Travel
 
 **Category selection guide:**
 
-
-| Image Content                               | Best Category                 |
-| ------------------------------------------- | ----------------------------- |
-| AI, computers, data, robots, interfaces     | Technology                    |
-| Finance, meetings, offices, corporate       | Business                      |
-| Portraits, diverse people, lifestyle scenes | People or Lifestyle           |
-| Healthcare, medical, mental health          | Science or Social Issues      |
-| Nature, forests, oceans, wildlife           | Landscapes or Animals         |
-| Food styling, cuisine, drinks               | Food or Drinks                |
-| Architecture, cityscapes, buildings         | Buildings and Architecture    |
-| Sustainability, environment, climate        | The Environment               |
-| Sports, exercise, outdoor activity          | Sports or Hobbies and Leisure |
-| Seasonal, cultural, religious themes        | Culture and Religion          |
-| Travel destinations, tourism                | Travel                        |
-| Abstract, conceptual, artistic              | Graphic Resources             |
-
+| Image Content | Best Category |
+|---|---|
+| AI, computers, data, robots, interfaces | Technology |
+| Finance, meetings, offices, corporate | Business |
+| Portraits, diverse people, lifestyle scenes | People or Lifestyle |
+| Healthcare, medical, mental health | Science or Social Issues |
+| Nature, forests, oceans, wildlife | Landscapes or Animals |
+| Food styling, cuisine, drinks | Food or Drinks |
+| Architecture, cityscapes, buildings | Buildings and Architecture |
+| Sustainability, environment, climate | The Environment |
+| Sports, exercise, outdoor activity | Sports or Hobbies and Leisure |
+| Seasonal, cultural, religious themes | Culture and Religion |
+| Travel destinations, tourism | Travel |
+| Abstract, conceptual, artistic | Graphic Resources |
 
 ---
 
@@ -734,18 +755,16 @@ fields     fields
 
 ## PART 9 — ERROR HANDLING
 
-
-| Error Type                            | Detection                           | Recovery                                                               |
-| ------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
-| Right panel not loading               | Panel container not in DOM after 3s | Re-click image thumbnail → retry                                       |
-| Sidecar file not found                | File read returns null              | Treat as TYPE B → evaluate manually                                    |
-| Title too long                        | Character count > 200               | Truncate to 70 chars at last word boundary                             |
-| Keywords over 49                      | UI counter shows > 49               | Remove from end of list until ≤ 49                                     |
-| Save not confirming                   | No state change after 3s            | Retry click → wait 3s → retry once more                                |
-| AI checkbox not appearing after check | Checkbox 2 not in DOM               | Wait 1s → re-check Checkbox 1 → retry                                  |
-| Pagination next not found             | Next button absent                  | This is the last page → session complete                               |
-| Selector not found (cached)           | querySelector returns null          | Re-discover that specific selector → update adobe_stock_selectors.json |
-
+| Error Type | Detection | Recovery |
+|---|---|---|
+| Right panel not loading | Panel container not in DOM after 3s | Re-click image thumbnail → retry |
+| Sidecar file not found | File read returns null | Treat as TYPE B → evaluate manually |
+| Title too long | Character count > 200 | Truncate to 70 chars at last word boundary |
+| Keywords over 49 | UI counter shows > 49 | Remove from end of list until ≤ 49 |
+| Save not confirming | No state change after 3s | Retry click → wait 3s → retry once more |
+| AI checkbox not appearing after check | Checkbox 2 not in DOM | Wait 1s → re-check Checkbox 1 → retry |
+| Pagination next not found | Next button absent | This is the last page → session complete |
+| Selector not found (cached) | querySelector returns null | Re-discover that specific selector → update adobe_stock_selectors.json |
 
 ### Retry Policy
 
@@ -754,7 +773,7 @@ max_retries: 3
 retry_delay_base: 2 seconds (exponential: 2s → 4s → 8s)
 
 After 3 retries on any action:
-  → Log error to automation_log.txt
+  → Log error to logs\automation.log
   → Skip current image → flag for manual review
   → Continue with next image
   → Never let a single failure halt the entire session
@@ -765,13 +784,11 @@ After 3 retries on any action:
 ## PART 10 — SESSION SUMMARY LOG
 
 At the end of every session, write to:
-
 ```
-C:\AdobeStockAutomation\logs\metadata_log_[YYYY-MM-DD].txt
+PROJECT_ROOT\logs\automation.log
 ```
 
 Contents:
-
 ```
 Session: [date/time]
 Report loaded: confirmed
@@ -788,6 +805,6 @@ Errors: [N] — see details below
 ---
 
 *03_METADATA_OPTIMIZER.md END*
-*Previous: 02_IMAGE_UPSCALER.md*
+*Previous: instructions\02_IMAGE_UPSCALER.md*
 *This file completes the Adobe Stock Automation System (3 of 3).*
 *Final step: User reviews prepared images on Adobe Stock and clicks Submit.*

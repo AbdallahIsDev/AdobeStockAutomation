@@ -1,0 +1,10 @@
+# Runtime state and generated artifacts
+data/
+downloads/
+logs/
+staging/
+
+# Common local dependencies and caches
+node_modules/
+dist/
+coverage/

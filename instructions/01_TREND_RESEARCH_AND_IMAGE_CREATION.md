@@ -6,7 +6,7 @@
 
 ## SYSTEM OVERVIEW
 
-This file governs the **entire upstream pipeline**: from discovering what the world is searching for right now, converting those insights into high-converting image descriptions, creating the images on Google Flow AI (labs.google), and downloading every image at 2K resolution — all fully automated, without any human intervention beyond initial launch.
+This file governs the **entire upstream pipeline**: from discovering what the world is searching for right now, converting those insights into high-converting image descriptions, creating the images on Google Flow AI (labs.google), and downloading every image at 2K resolution as soon as each render becomes available — all fully automated, without any human intervention beyond initial launch.
 
 ---
 
@@ -15,7 +15,7 @@ This file governs the **entire upstream pipeline**: from discovering what the wo
 **Before executing ANY step in this file — before initializing state, before searching, before touching the browser — the agent MUST read the full contents of:**
 
 ```
-C:\AdobeStockAutomation\data\STOCK_SUCCESS_REPORT.md
+PROJECT_ROOT\instructions\STOCK_SUCCESS_REPORT.md
 ```
 
 This file contains the complete strategic knowledge base that governs every decision made in this system: what makes a high-value image, how Adobe Stock's algorithm works, the correct keyword and title architecture, which niches are highest priority, quality standards, commercial thinking frameworks, and the full contributor success playbook.
@@ -30,7 +30,7 @@ This file contains the complete strategic knowledge base that governs every deci
 - If the file cannot be found at the path above → STOP and log:
   "CRITICAL: STOCK_SUCCESS_REPORT.md not found at expected path.
    Cannot proceed without the strategy knowledge base.
-   Please ensure the file exists at: C:\AdobeStockAutomation\data\STOCK_SUCCESS_REPORT.md"
+   Please ensure the file exists at: PROJECT_ROOT\instructions\STOCK_SUCCESS_REPORT.md"
   → EXIT
 - If the file is found and read successfully → log:
   "Strategy knowledge base loaded successfully. Proceeding with session."
@@ -77,8 +77,8 @@ This file contains the complete strategic knowledge base that governs every deci
 
 **Output of this file feeds directly into:**
 
-- `02_IMAGE_UPSCALER.md` — 4K upscaling & download management
-- `03_METADATA_OPTIMIZER.md` — titles, keywords, categories & Adobe Stock upload pipeline
+- `instructions\02_IMAGE_UPSCALER.md` — 4K upscaling & download management
+- `instructions\03_METADATA_OPTIMIZER.md` — titles, keywords, categories & Adobe Stock upload pipeline
 
 ---
 
@@ -97,7 +97,7 @@ The Orchestrator is the master coordinator. It boots up all sub-agents in sequen
 - Pass descriptions to Sub-Agent C (Image Creation & Download)
 - Sub-Agent D (Metadata Generator) fires automatically after each confirmed download — no manual trigger needed
 - Monitor rate limits and trigger account-switching logic
-- Log all activity to `automation_log.txt`
+- Log all activity to `logs\automation.log`
 - Stop gracefully when all rate limits across all accounts are exhausted
 
 ### Startup Sequence
@@ -105,7 +105,7 @@ The Orchestrator is the master coordinator. It boots up all sub-agents in sequen
 ```
 STEP 0: READ STOCK_SUCCESS_REPORT.md  ← MUST happen before anything else
 ─────────────────────────────────────────────────────────────────
-  Path: C:\AdobeStockAutomation\data\STOCK_SUCCESS_REPORT.md
+  Path: PROJECT_ROOT\instructions\STOCK_SUCCESS_REPORT.md
   Action: Read the full file into agent memory
   On success: LOG "Strategy knowledge base loaded. Session starting."
   On failure: LOG "CRITICAL: Report not found. Halting." → EXIT
@@ -128,7 +128,7 @@ STEP 6: Launch Sub-Agent B → receive descriptions[]
 STEP 7: Launch Sub-Agent C → begin image creation loop
          Sub-Agent D → auto-fires after each confirmed download (no explicit launch needed)
 STEP 8: After each image batch → update session_state.json
-STEP 9: On completion → write final summary to automation_log.txt
+STEP 9: On completion → write final summary to logs\automation.log
 ```
 
 ### State File: `session_state.json`
@@ -160,9 +160,11 @@ STEP 9: On completion → write final summary to automation_log.txt
   "downloaded_images": [],
   "current_16x9_submitted": [],
   "current_16x9_rendered": [],
+  "current_16x9_failed": [],
   "current_16x9_downloaded": [],
   "current_1x1_submitted": [],
   "current_1x1_rendered": [],
+  "current_1x1_failed": [],
   "current_1x1_downloaded": [],
   "limit_reached_on_image": false,
   "partial_download_required": false,
@@ -2512,6 +2514,16 @@ HOW:  Right-click each image → 2K upscaled → Wait 1s → next image
       Background watcher renames + moves files to output folder
       Sub-Agent D writes .metadata.json sidecar per confirmed download
 
+2K FAILURE FALLBACK:
+  If a single image's 2K download/upscale request fails:
+  → Retry 2K from the gallery
+  → If 2K fails a second time for that same image:
+     → STOP retrying 2K
+     → Download that image at 1X immediately
+     → Log: "2K failed twice for [image_id/slot]. Downloaded 1X fallback."
+     → Mark session_state/current download record with resolution_fallback = "1X"
+     → Continue the batch — do not block the rest of the group
+
 RATE LIMIT INTERRUPT:
   If limit hits mid-group (during STEP 1 or STEP 4):
   → Wait for pending renders → check for "limit reached" DOM text
@@ -2544,7 +2556,7 @@ Per-group verification (after STEP 3 and after STEP 6):
 Session-end verification:
 - Final gallery scan confirms no undownloaded images remain
 - Log: "Session complete. [N] total images downloaded. [N] series completed."
-- Write final counts to session_state.json and automation_log.txt
+- Write final counts to session_state.json and logs\automation.log
 ```
 
 ---
@@ -2555,7 +2567,7 @@ Session-end verification:
 ═══════════════════════════════════════════════════════
   STEP 0 — MANDATORY PRE-BOOT (nothing runs before this)
 ═══════════════════════════════════════════════════════
-READ: C:\AdobeStockAutomation\data\STOCK_SUCCESS_REPORT.md
+READ: PROJECT_ROOT\instructions\STOCK_SUCCESS_REPORT.md
   │
   ├── File NOT found? ──► LOG: "CRITICAL: Report missing. Halting." ──► EXIT
   │
@@ -2585,7 +2597,7 @@ STEP 1 — STATIC CACHE CHECK:
   ├── YES (cache valid) ──► Load cache into memory
   │                         LOG: "Cache loaded. Age: X days."
   │                         Skip all static searches entirely ──────────┐
-  │                                                                      │
+  │                                                                     │
   └── NO (missing/expired) ──► Run 15 static rebuild queries            │
                                Parse + synthesize results               │
                                Save to static_knowledge_cache.json      │
@@ -2671,14 +2683,27 @@ FOR EACH trend (cycling — restarts from 0 when all trends done):
   │   [16C] Enter overhead desc          → 16:9 + x1 → Generate → Wait 1s
   │   [16D] Enter mood/variant desc      → 16:9 + x1 → Generate → Wait 1s
   │
-  ├─ STEP 2 — Wait for 16:9 renders:
-  │   Poll every 10s, max 3 min
-  │   Check thumbnail DOM text for "limit reached" → if found, trigger partial download
+  ├─ STEP 2 — Do NOT wait for 16:9 to finish:
+  │   The moment all 4 prompts in the first batch are submitted,
+  │   proceed directly to the 1:1 batch submission.
+  │   While the first batch is still rendering, keep watching for any finished tile.
+  │   If any image tile finishes rendering → mark it ready for immediate download.
+  │   If a tile shows "This generation might violate our policies" →
+  │     classify as PROMPT VIOLATION (NOT a limit error)
+  │     mark only that prompt as failed
+  │     keep successfully rendered sibling images in the batch
+  │   Check thumbnail DOM text for "limit reached" separately → if found, trigger partial download
   │
-  ├─ STEP 3 — Download 16:9 group (parallel upscaling, 1s gap):
-  │   Right-click each of 4 images → 2K upscaled → Wait 1s → next
+  ├─ STEP 3 — Download rendered 16:9 images immediately (parallel upscaling, 1s gap):
+  │   Do NOT wait for all 4 images to finish before starting downloads
+  │   Do NOT pause the creation loop just because some tiles are still rendering
+  │   Right-click each rendered image as soon as it appears → 2K upscaled → Wait 1s → next rendered image
+  │   If 2K download/upscale fails twice for the same image → download 1X and continue
   │   Background watcher renames + moves files as they auto-download
   │   └─ Sub-Agent D fires per confirmed download: writes .metadata.json sidecar
+  │   PARITY RULE: image count and .metadata.json count in the output folder must stay equal.
+  │                If a download exists without a sidecar, Sub-Agent D or the 02 parity scan must
+  │                create the missing sidecar before the image can move forward.
   │
   ├─ STEP 4 — Generate 1:1 group (4 descriptions, one by one, x1 each):
   │   [1A]  Enter portrait desc          → 1:1 + x1 → Generate → Wait 1s
@@ -2686,16 +2711,25 @@ FOR EACH trend (cycling — restarts from 0 when all trends done):
   │   [1C]  Enter flat-lay desc          → 1:1 + x1 → Generate → Wait 1s
   │   [1D]  Enter demographic variant    → 1:1 + x1 → Generate → Wait 1s
   │
-  ├─ STEP 5 — Wait for 1:1 renders:
-  │   Poll every 10s, max 3 min
-  │   Check thumbnail DOM text for "limit reached" → if found, trigger partial download
+  ├─ STEP 5 — Continue the rolling queue while 1:1 renders:
+  │   Do NOT wait for 1:1 renders to finish before moving on to the next trend/batch.
+  │   Any finished tile from either active batch should be downloaded immediately.
+  │   If a tile shows "This generation might violate our policies" →
+  │     classify as PROMPT VIOLATION (NOT a limit error)
+  │     mark only that prompt as failed
+  │     keep successfully rendered sibling images in the batch
+  │   Check thumbnail DOM text for "limit reached" separately → if found, trigger partial download
   │
-  ├─ STEP 6 — Download 1:1 group (parallel upscaling, 1s gap):
-  │   Right-click each of 4 images → 2K upscaled → Wait 1s → next
+  ├─ STEP 6 — Download rendered 1:1 images immediately (parallel upscaling, 1s gap):
+  │   Do NOT wait for all 4 images to finish before starting downloads
+  │   Keep the create queue moving; download completed tiles opportunistically in the background flow
+  │   Right-click each rendered image as soon as it appears → 2K upscaled → Wait 1s → next rendered image
+  │   If 2K download/upscale fails twice for the same image → download 1X and continue
   │   Background watcher renames + moves files as they auto-download
   │   └─ Sub-Agent D fires per confirmed download: writes .metadata.json sidecar
   │
-  └─ Series complete → next trend (loop back to first trend when all done)
+  └─ Series complete → move to next trend/batch immediately if more prompts remain.
+      Failed prompt-violation slots are rewritten and re-submitted without blocking the rolling queue.
              │
              ▼
              More trends? → YES → next trend's STEP 1
@@ -2744,11 +2778,27 @@ If ALL accounts fully exhausted:
   → Proceed to session complete
      │
      ▼
+PROMPT VIOLATION HANDLER:
+─────────────────────────
+Detection Methods:
+  1. Failed tile text: "This generation might violate our policies"
+  2. Failed tile controls: Retry / Reuse Prompt / Delete
+
+If prompt violation detected in any 4-image batch:
+  → DO NOT classify it as a model limit or account exhaustion
+  → DO NOT stop the overall batch
+  → Immediately continue downloading every sibling image that already rendered successfully
+  → Mark only the failed prompt slot as needing rewrite
+  → Rewrite the prompt to keep the same commercial intent while removing policy-sensitive phrasing
+  → Re-submit only the rewritten prompt for that slot
+  → Continue the generation loop
+     │
+     ▼
 SESSION COMPLETE
 ─────────────────
 Wait for all pending downloads to finish (2 empty poll cycles = done)
 Update session_state.json (final)
-Write automation_log.txt summary:
+Write logs\automation.log summary:
   - Date/time
   - Report file read: confirmed
   - Static cache status + age
@@ -2761,7 +2811,7 @@ Write automation_log.txt summary:
   - Output folder path
   - Errors encountered
 
-Pass output folder path to 02_IMAGE_UPSCALER.md
+Pass output folder path to instructions\02_IMAGE_UPSCALER.md
 EXIT
 ```
 
@@ -2778,7 +2828,9 @@ EXIT
 | Selector not found               | querySelector returns null          | Re-run selector discovery        |
 | Modal/popup blocking interaction | Unexpected overlay in DOM           | Dismiss overlay, log, retry      |
 | Generation job silent failure    | No new images after 3 min           | Re-submit description            |
-| Download failure                 | File not in downloads after 60s     | Retry download from gallery      |
+| Prompt violation failure         | Tile says "This generation might violate our policies" | Treat as prompt-specific failure, keep successful siblings, rewrite the failed prompt, re-submit only that slot |
+| Download failure                 | File not in downloads after 60s     | Retry 2K once; if 2K fails twice for the same image, download 1X and continue |
+| Image/sidecar parity mismatch    | Image count != .metadata.json count in downloads folder | Run parity scan, create missing sidecars for every image, log orphans, do not proceed to 02 upscaling until counts match |
 | Login session expired            | Redirected to login page            | Re-login with current account    |
 | Network timeout                  | Request timeout exception           | Wait 10s, retry 3×               |
 | Rate limit false positive        | Error shown but generation proceeds | Log warning, continue monitoring |
@@ -2795,10 +2847,15 @@ Global Retry Config:
 - Retry delays: 2s → 4s → 8s
 
 After 3 failed retries on any single action:
-→ Log error to automation_log.txt
+→ Log error to logs\automation.log
 → Skip current image/action
 → Continue with next item in queue
 → Never let a single failure halt the entire session
+
+Prompt-violation special rule:
+→ Do NOT retry the exact same prompt text 3×
+→ Rewrite the failed prompt immediately and submit the revised version
+→ Keep already rendered sibling images moving through download + metadata without waiting
 ```
 
 ---
@@ -2806,35 +2863,52 @@ After 3 failed retries on any single action:
 ## PART 7 — OUTPUT FOLDER STRUCTURE
 
 ```
-C:\AdobeStockAutomation\
+PROJECT_ROOT\
 │
-├── downloads\
-│   └── [YYYY-MM-DD]\
-│       ├── ai_finance_16A_establishing_L1_001_20260323.png
-│       ├── ai_finance_16A_establishing_L1_001_20260323.metadata.json  ← Sub-Agent D
-│       ├── ai_finance_16B_close_up_L1_002_20260323.png
-│       ├── ai_finance_16B_close_up_L1_002_20260323.metadata.json      ← Sub-Agent D
-│       ├── ai_finance_16C_overhead_L1_003_20260323.png
-│       ├── ai_finance_16C_overhead_L1_003_20260323.metadata.json      ← Sub-Agent D
-│       ├── ai_finance_16D_mood_variant_L1_004_20260323.png
-│       ├── ai_finance_16D_mood_variant_L1_004_20260323.metadata.json  ← Sub-Agent D
-│       ├── ai_finance_1A_portrait_L1_005_20260323.png
-│       ├── ai_finance_1A_portrait_L1_005_20260323.metadata.json       ← Sub-Agent D
-│       └── ...  (no fixed count — grows until all credits exhausted)
-│       (every image always paired with its .metadata.json sidecar)
+├── instructions\                       ← System rules and workflow definitions
+│   ├── 01_TREND_RESEARCH_AND_IMAGE_CREATION.md
+│   ├── 02_IMAGE_UPSCALER.md
+│   ├── 03_METADATA_OPTIMIZER.md
+│   └── STOCK_SUCCESS_REPORT.md         ← READ FIRST on every session (Step 0)
+│
+├── scripts\                            ← Runnable workers and helper scripts
+│   ├── flow_batch_submit_worker.ts
+│   ├── flow_download_worker.ts
+│   ├── flow_nonblocking_download_worker.ts
+│   ├── flow_wait_for_new_renders.ts
+│   ├── flow_probe.ts
+│   ├── reconcile_data_and_sidecars.ts
+│   ├── run_02_pipeline.ts
+│   └── process_adobe_page.ps1
+│
+├── downloads\                          ← ALL source images (AI + manual)
+│   ├── [YYYY-MM-DD]\                  ← AI-generated images from FILE_01
+│   │   ├── ai_finance_16A_establishing_L1_001_20260323.png
+│   │   ├── ai_finance_16A_establishing_L1_001_20260323.metadata.json  ← Sub-Agent D
+│   │   └── ...  (every AI image always paired with its .metadata.json sidecar)
+│   ├── manual\                        ← Manually added images from any source
+│   └── upscaled\                      ← FINAL OUTPUT (populated by FILE_02)
+│
+├── staging\                            ← TEMP — created/cleaned by FILE_02
+│   ├── x2\
+│   ├── x3\
+│   ├── x4\
+│   └── copy_only\
 │
 ├── data\
-│   ├── STOCK_SUCCESS_REPORT.md          ← READ FIRST on every session (Step 0)
-│   ├── session_state.json               ← updated continuously during session
-│   ├── trend_data.json                  ← regenerated every session
-│   ├── descriptions.json                ← regenerated every session (8 per trend)
+│   ├── image_registry.json              ← master registry of ALL images (02 manages)
+│   ├── session_state.json               ← updated continuously during FILE_01 session
+│   ├── upscaler_state.json              ← FILE_02 config (binary path, method, model)
+│   ├── trend_data.json                  ← regenerated every FILE_01 session
+│   ├── descriptions.json                ← regenerated every FILE_01 session (8 per trend)
 │   ├── accounts.json                    ← manually maintained, add accounts freely
-│   ├── selectors_registry.json          ← built ONCE, updated only on selector failure
+│   ├── selectors_registry.json          ← Google Flow selectors (FILE_01)
+│   ├── adobe_stock_selectors.json       ← Adobe Stock selectors (FILE_03)
 │   └── static_knowledge_cache.json      ← built ONCE, refreshed every 90 days
 │
 ├── logs\
-│   ├── automation_log_[YYYY-MM-DD].txt
-│   └── cache_build_log_[YYYY-MM-DD].txt
+│   ├── automation.log                   ← single shared runtime log for the project
+│   └── screenshots\                     ← targeted browser evidence captures when needed
 │
 └── [depends on] C:\Users\11\browser-automation-core\
     ├── launch_browser.bat               ← called to start CDP debug browser
@@ -2905,20 +2979,22 @@ Upon session completion (or when the generation loop pauses between account swit
   "file_01_status": "complete",
   "handoff_to_02_upscaler": {
     "images_ready_for_processing": true,
-    "images_folder": "C:\\AdobeStockAutomation\\downloads\\[YYYY-MM-DD]",
+    "ai_images_folder": "C:\\AdobeStockAutomation\\downloads\\[YYYY-MM-DD]",
+    "manual_images_folder": "C:\\AdobeStockAutomation\\downloads\\manual",
     "images_downloaded_count": "[dynamic — no fixed number]",
-    "metadata_sidecars_written": "[same count as images — always paired]",
+    "metadata_sidecars_written": "[same count as AI images — always paired]",
     "loop_passes_completed": "[N]",
     "trend_topics_used": ["AI Finance", "Climate Tech", "..."],
     "descriptions_reference": "C:\\AdobeStockAutomation\\data\\descriptions.json",
-    "sidecar_naming_convention": "[image_basename].metadata.json"
+    "sidecar_naming_convention": "[image_basename].metadata.json",
+    "note": "FILE_02 will scan downloads\\ recursively and register all images (AI + manual) in image_registry.json"
   }
 }
 ```
 
-`02_IMAGE_UPSCALER.md` reads this handoff block to know which folder to process. Every `.png` in the folder has a paired `.metadata.json` sidecar that travels with it through upscaling. `03_METADATA_OPTIMIZER.md` reads these sidecars to apply pre-written metadata to each uploaded image on Adobe Stock — no reverse-engineering from pixels required.
+`02_IMAGE_UPSCALER.md` scans ALL images in `downloads\` (both AI-generated and manually added), registers them in `image_registry.json`, renames non-conforming files, creates metadata stubs for manual images, groups by resolution, and upscales everything to 4K in `downloads\upscaled\`. The `.metadata.json` sidecars travel alongside each image through the entire pipeline. `03_METADATA_OPTIMIZER.md` uses `image_registry.json` to find the upscaled path of each image and applies its sidecar metadata to Adobe Stock.
 
 ---
 
-*FILE 01 END — TREND RESEARCH & IMAGE CREATION AUTOMATION*
+*01 END — TREND RESEARCH & IMAGE CREATION AUTOMATION*
 *Next: 02_IMAGE_UPSCALER.md → 03_METADATA_OPTIMIZER.md*
