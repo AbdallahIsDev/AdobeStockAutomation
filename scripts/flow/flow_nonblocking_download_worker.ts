@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Download, Page } from "playwright";
-import { connectBrowser, findPageByUrl, isDebugPortReady } from "../../../../browser-automation-core/browser_core";
-import { AUTOMATION_LOG_PATH, DATA_DIR, DOWNLOADS_DIR, SESSION_STATE_PATH } from "./project_paths";
+import { connectBrowser, findPageByUrl, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { AUTOMATION_LOG_PATH, DATA_DIR, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -72,7 +72,9 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${new Date().toISOString()} ${message}\n`, "utf8");
+  const now = new Date();
+  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
 }
 
 function dateFolderName(): string {

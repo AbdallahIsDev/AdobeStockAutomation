@@ -2,7 +2,24 @@
 data/
 downloads/
 logs/
-staging/
+staging/*
+!staging/.gitkeep
+!staging/copy_only/
+!staging/copy_only/.gitkeep
+!staging/x2/
+!staging/x2/.gitkeep
+!staging/x3/
+!staging/x3/.gitkeep
+!staging/x4/
+!staging/x4/.gitkeep
+staging/copy_only/*
+!staging/copy_only/.gitkeep
+staging/x2/*
+!staging/x2/.gitkeep
+staging/x3/*
+!staging/x3/.gitkeep
+staging/x4/*
+!staging/x4/.gitkeep
 
 # Common local dependencies and caches
 node_modules/

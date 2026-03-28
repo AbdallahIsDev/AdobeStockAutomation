@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Page } from "playwright";
-import { connectBrowser, findPageByUrl, isDebugPortReady, waitForElement } from "../../../../browser-automation-core/browser_core";
-import { AUTOMATION_LOG_PATH, DESCRIPTIONS_PATH, SESSION_STATE_PATH } from "./project_paths";
+import { connectBrowser, findPageByUrl, isDebugPortReady, waitForElement } from "../../../../../browser-automation-core/browser_core";
+import { AUTOMATION_LOG_PATH, DESCRIPTIONS_PATH, SESSION_STATE_PATH } from "../project_paths";
 
 type Description = {
   id: number;
@@ -66,7 +66,9 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${new Date().toISOString()} ${message}\n`, "utf8");
+  const now = new Date();
+  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
 }
 
 function normalize(value: string | null | undefined): string {

@@ -7,7 +7,7 @@ import {
   isDebugPortReady,
   screenshotElement,
   waitForElement,
-} from "../../../../browser-automation-core/browser_core";
+} from "../../../../../browser-automation-core/browser_core";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -15,7 +15,7 @@ import {
   LOGS_DIR,
   SCREENSHOTS_DIR,
   SESSION_STATE_PATH,
-} from "./project_paths";
+} from "../project_paths";
 
 type Json = Record<string, unknown>;
 
@@ -95,7 +95,8 @@ function appendLog(line: string): void {
 }
 
 function timestampIso(): string {
-  return new Date().toISOString();
+  const now = new Date();
+  return `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
 }
 
 function dateFolderName(): string {

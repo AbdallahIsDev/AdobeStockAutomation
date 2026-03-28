@@ -1,0 +1,363 @@
+# 02_IMAGE_CREATION.md
+## Adobe Stock Automation System · Execution File 2
+
+---
+
+## PURPOSE
+
+Convert ranked trends into image-prompt series, create the images in Google Flow, download each successful render, and write a `.metadata.json` sidecar next to every downloaded image.
+
+This file owns:
+
+- description generation
+- Flow browser automation
+- rolling generation/download loop
+- rate-limit handling
+- account switching
+- metadata sidecar creation
+
+---
+
+## SUCCESS REPORT PREREQUISITE
+
+This file assumes `SKILL.md` already forced a full read of:
+
+`PROJECT_ROOT\instructions\STOCK_SUCCESS_REPORT.md`
+
+The full report must be loaded into active memory before this file runs.
+
+If this file is invoked directly without `SKILL.md`, read the full success report first, load it into memory, then continue.
+
+---
+
+## REQUIRED FILES
+
+```text
+PROJECT_ROOT\data\trend_data.json
+PROJECT_ROOT\data\descriptions.json
+PROJECT_ROOT\data\session_state.json
+PROJECT_ROOT\data\accounts.json
+PROJECT_ROOT\data\selectors_registry.json
+PROJECT_ROOT\logs\automation.log
+PROJECT_ROOT\scripts\session_runtime.ps1
+C:\Users\11\browser-automation-core\launch_browser.bat
+```
+
+---
+
+## DESCRIPTION GENERATION
+
+Generate exactly 8 prompts per trend:
+
+| Slot | Aspect | Purpose |
+| --- | --- | --- |
+| 16A | 16:9 | Establishing shot |
+| 16B | 16:9 | Close-up detail |
+| 16C | 16:9 | Overhead or aerial |
+| 16D | 16:9 | Mood or demographic variant |
+| 1A | 1:1 | Centered portrait |
+| 1B | 1:1 | Extreme close-up |
+| 1C | 1:1 | Flat-lay or top-down lifestyle |
+| 1D | 1:1 | Cultural or demographic variant |
+
+Prompt rules:
+
+- every slot must be unique
+- keep subject, composition, mood, and buyer use case explicit
+- no repeated prompt phrasing across the same 8-image set
+- optimize for stock usefulness, not artistic novelty alone
+- every trend must be strong enough to support the full 8-slot series
+
+If runtime JSON files are missing, run:
+
+```text
+powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action bootstrap
+```
+
+If this is a stage-only run, set mode with:
+
+```text
+powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage image_creation
+```
+
+The bootstrap script creates `descriptions.json`. This stage must fill these keys:
+
+- `generated_at`
+- `total_descriptions`
+- `loop_index`
+- `descriptions_per_trend`
+- `series_structure`
+- `descriptions[]`
+
+Each `descriptions[]` item must include:
+
+- `id`
+- `trend_id`
+- `trend_topic`
+- `series_slot`
+- `aspect_ratio`
+- `quantity`
+- `prompt_text`
+- `commercial_tags`
+- `status`
+
+---
+
+## FLOW BROWSER RULES
+
+Always use the shared browser automation framework:
+
+```text
+C:\Users\11\browser-automation-core\
+```
+
+Launch through:
+
+```text
+C:\Users\11\browser-automation-core\launch_browser.bat
+```
+
+Rules:
+
+- never launch a raw Chrome process directly
+- connect to the existing debug browser if port 9222 is already ready
+- find tabs by URL pattern, never by title
+- discover selectors once, then cache them in `selectors_registry.json`
+- for dynamic menus, trigger first, wait for DOM change, then resolve selectors
+
+---
+
+## FLOW SESSION SETUP
+
+1. Open `https://labs.google/fx/tools/flow`
+2. Resolve the current account's active project URL dynamically
+3. Save the resolved URL to `session_state.json`
+4. Dismiss the one-time "New Image Aspect Ratios" modal if it appears
+5. Verify these defaults before the loop:
+   - output type = image
+   - quantity = x1
+   - aspect ratio = set per slot
+   - model = current session model
+
+Current model priority:
+
+1. Nano Banana 2
+2. Nano Banana Pro
+
+---
+
+## SUB-AGENT SYSTEM
+
+Use sub-agents when the runtime supports them.
+
+- Sub-Agent A - Prompt builder
+  Converts ranked trends into the full 8-slot prompt set and updates `descriptions.json`.
+- Sub-Agent B - Flow operator
+  Submits prompts, switches models/accounts when needed, and keeps `session_state.json` current.
+- Sub-Agent C - Background file watcher
+  Monitors downloads, renames/moves files, and confirms group completion signals.
+- Sub-Agent D - Metadata sidecar writer
+  Writes `[image_path].metadata.json` as soon as each download is confirmed.
+
+If sub-agents are unavailable, execute the same order sequentially in one run.
+
+---
+
+## CREATION LOOP
+
+For each ranked trend:
+
+### Phase 1 - 16:9 group
+
+1. Submit 16A, 16B, 16C, 16D one by one
+2. Keep quantity at `x1`
+3. Wait 1 second between submissions
+4. Do not wait for each render before sending the next slot
+
+### Phase 2 - Wait and download 16:9
+
+1. Poll the gallery every 10 seconds
+2. Max wait: 3 minutes
+3. Download every successful render immediately
+4. Prefer `2K` download
+5. If the same image fails `2K` twice, use `1X` and mark that fallback in sidecar/state
+
+Background file watcher:
+
+- monitor the system downloads folder continuously during the session
+- when a new file appears:
+  - rename it to `[trend_topic]_[series_slot]_L[loop_index]_[seq]_[date].png`
+  - move it to `PROJECT_ROOT\downloads\[session_date]\`
+  - trigger Sub-Agent D to write the matching `.metadata.json`
+  - update `session_state.downloaded_images`
+  - increment `images_downloaded_count`
+  - log `Downloaded + metadata written: [filename]`
+  - if `session_state.pipeline_mode = full_system` and `session_state.post_download_policy = fifo_upscale_prepare`, immediately run `powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action fifo -ImagePath "[saved_path]"`
+  - if `session_state.pipeline_mode = stage_only`, stop at download + sidecar only
+
+Step 3 complete signal:
+
+- all rendered 16:9 images are confirmed in `downloaded_images`
+- or 60 seconds pass since the last upscale request with no more pending renders
+- then log `16:9 group for [trend_topic] complete. [N] images downloaded.`
+- then proceed to the 1:1 group
+
+### Phase 3 - 1:1 group
+
+Repeat the same pattern for 1A, 1B, 1C, 1D.
+
+### Phase 4 - Move to next trend
+
+After all available downloads finish for the current 8-slot set:
+
+- write sidecars for every downloaded image
+- mark prompt statuses in `descriptions.json`
+- in `full_system` mode, each confirmed download should already be entering FIFO upscale/prepare
+- continue to the next trend
+
+This loop is rolling and non-blocking. Do not force perfect 4-image batch completeness before continuing work.
+
+---
+
+## RATE LIMIT HANDLING
+
+Check for limits in two places:
+
+1. modal or toast error messages
+2. thumbnail text inside partially rendered gallery cards
+
+When a limit is detected:
+
+### If current model is Nano Banana 2
+
+- mark `nano_banana_2_exhausted = true` for the active account
+- switch to Nano Banana Pro
+- download any successful renders before retrying
+- retry the same failed description once the model switch completes
+
+### If current model is Nano Banana Pro
+
+- mark `nano_banana_pro_exhausted = true`
+- mark the account `fully_exhausted = true`
+- download any successful renders before switching accounts
+
+### If all accounts are exhausted
+
+- save state
+- finish remaining downloads
+- stop the generation loop cleanly
+
+---
+
+## ACCOUNT SWITCHING
+
+When an account is fully exhausted:
+
+1. open the Google account menu
+2. sign out
+3. return to the Flow landing page if needed
+4. click `Create with Flow`
+5. select the next account from `accounts.json` where `fully_exhausted = false`
+6. resolve that account's current project URL again
+7. continue the same session from the same trend/slot
+
+Never assume the previous account's project URL is valid for the next account.
+
+---
+
+## METADATA SIDECAR CREATION
+
+Sub-Agent D fires immediately after each confirmed download.
+
+For every downloaded image, write:
+
+```text
+[image_path].metadata.json
+```
+
+Minimum sidecar contract:
+
+- `generated_at`
+- `source_image`
+- `prompt_text`
+- `trend_id`
+- `trend_topic`
+- `trend_category`
+- `series_slot`
+- `aspect_ratio`
+- `loop_index`
+- `status`
+- `adobe_stock_metadata.title`
+- `adobe_stock_metadata.title_char_count`
+- `adobe_stock_metadata.keywords`
+- `adobe_stock_metadata.category`
+- `adobe_stock_metadata.file_type`
+- `adobe_stock_metadata.ai_generated`
+- `adobe_stock_metadata.people_or_property_fictional`
+
+Rules:
+
+- create metadata from the known generation context, not from visual analysis
+- keep titles under 70 characters
+- follow the 35-keyword blueprint from the success report
+- choose the best Adobe Stock category now, not later
+- sidecar and image must always travel together
+
+---
+
+## SESSION STATE REQUIREMENTS
+
+Maintain these operational fields in `session_state.json`:
+
+- `session_date`, `session_started_at`
+- `pipeline_mode`, `post_download_policy`
+- `current_stage`, `last_completed_stage`, `current_step`
+- `current_account_index`, `current_account_email`, `current_model`
+- `current_aspect_ratio`
+- `loop_index`, `current_description_index`
+- `current_project_url`, `current_project_id`
+- `current_trend_id`, `current_series_slot`
+- `descriptions_queue`
+- `images_created_count`, `images_downloaded_count`, `downloads_completed`
+- `upscale_requested_ids`, `downloaded_images`
+- `current_16x9_submitted`, `current_16x9_rendered`, `current_16x9_failed`, `current_16x9_downloaded`
+- `current_1x1_submitted`, `current_1x1_rendered`, `current_1x1_failed`, `current_1x1_downloaded`
+- `limit_reached_on_image`
+- `accounts`
+
+---
+
+## OUTPUTS AND HANDOFF
+
+Primary outputs:
+
+- `PROJECT_ROOT\data\descriptions.json`
+- downloaded images in `PROJECT_ROOT\downloads\[YYYY-MM-DD]\`
+- matching `.metadata.json` sidecars
+- updated `session_state.json`
+- updated `selectors_registry.json`
+
+Handoff:
+
+```text
+Next execution file: 03_IMAGE_UPSCALER.md
+```
+
+Pass forward:
+
+- downloaded images
+- sidecars
+- registry-relevant filenames
+- any 2K-to-1X fallback markers
+
+---
+
+## SUCCESS CRITERIA
+
+This file is complete when:
+
+- every selected trend has an 8-slot prompt series
+- all successful renders were downloaded
+- every downloaded image has exactly one `.metadata.json` sidecar
+- model/account exhaustion state is accurate
+- the output is ready for `03_IMAGE_UPSCALER.md`

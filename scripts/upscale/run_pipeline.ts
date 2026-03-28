@@ -10,7 +10,7 @@ import {
   ROOT,
   STAGING_DIR,
   UPSCALER_STATE_PATH,
-} from "./project_paths";
+} from "../project_paths";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -49,6 +49,13 @@ type UpscalerState = {
   method?: string | null;
 };
 
+type RunMode = "batch" | "fifo";
+
+type CliArgs = {
+  mode: RunMode;
+  image: string | null;
+};
+
 const UPSCALER_LOG_PATH = AUTOMATION_LOG_PATH;
 const OUTPUT_DIR = path.join(DOWNLOADS_DIR, "upscaled", new Date().toISOString().slice(0, 10));
 const MANUAL_DIR = path.join(DOWNLOADS_DIR, "manual");
@@ -57,6 +64,29 @@ const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".tif", ".ti
 const EXCLUDED_DIRS = new Set(["upscaled", "staging"]);
 const MANUAL_NAME_RE = /^manual_[a-z0-9_]+_M\d{3}_\d{8}\.[a-z0-9]+$/i;
 const DATE_FOLDER_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseArgs(): CliArgs {
+  let mode: RunMode = "batch";
+  let image: string | null = null;
+
+  for (const arg of process.argv.slice(2)) {
+    if (arg.startsWith("--mode=")) {
+      const value = arg.split("=", 2)[1]?.trim().toLowerCase();
+      if (value === "fifo" || value === "batch") {
+        mode = value;
+      }
+      continue;
+    }
+    if (arg.startsWith("--image=")) {
+      const raw = arg.split("=", 2)[1]?.trim();
+      if (raw) {
+        image = raw.replace(/^"(.*)"$/, "$1");
+      }
+    }
+  }
+
+  return { mode, image };
+}
 
 function readJson<T>(filePath: string, fallback: T): T {
   try {
@@ -73,16 +103,24 @@ function writeJson(filePath: string, value: unknown): void {
 
 function appendLog(message: string): void {
   fs.mkdirSync(path.dirname(AUTOMATION_LOG_PATH), { recursive: true });
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${new Date().toISOString()} ${message}\n`, "utf8");
+  const now = new Date();
+  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
 }
 
 function appendUpscalerLog(message: string): void {
   fs.mkdirSync(path.dirname(UPSCALER_LOG_PATH), { recursive: true });
-  fs.appendFileSync(UPSCALER_LOG_PATH, `${new Date().toISOString()} ${message}\n`, "utf8");
+  const now = new Date();
+  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
+  fs.appendFileSync(UPSCALER_LOG_PATH, `${stamp} ${message}\n`, "utf8");
 }
 
 function windowsRelative(filePath: string): string {
   return path.relative(ROOT, filePath).replaceAll("/", "\\");
+}
+
+function normalizedAbsolute(filePath: string): string {
+  return path.resolve(filePath).replaceAll("/", "\\").toLowerCase();
 }
 
 function slugify(value: string): string {
@@ -187,7 +225,7 @@ function createSidecar(sidecarPath: string, imageFile: string, source: "ai_gener
     loop_index: null,
     adobe_stock_metadata: {
       title: source === "manual"
-        ? "[NEEDS MANUAL REVIEW - set by file 03_METADATA_OPTIMIZER.md]"
+        ? "[NEEDS MANUAL REVIEW - set by file 04_METADATA_OPTIMIZER.md]"
         : "[STUB - verify before upload]",
       title_char_count: 0,
       keywords: [],
@@ -250,6 +288,7 @@ function copyWithSidecar(sourceImage: string, sourceSidecar: string | null, dest
 }
 
 function main(): void {
+  const args = parseArgs();
   ensureFolder(LOGS_DIR);
   ensureFolder(OUTPUT_DIR);
 
@@ -345,6 +384,28 @@ function main(): void {
 
   clearStaging();
 
+  let fifoTargetNames: Set<string> | null = null;
+  if (args.mode === "fifo") {
+    const requestedImage = args.image ? normalizedAbsolute(args.image) : null;
+    const candidates = Object.values(registry.images)
+      .filter((entry) => !entry.upscaled)
+      .filter((entry) => entry.source === "ai_generated")
+      .filter((entry) => {
+        if (!requestedImage) return true;
+        const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+        return normalizedAbsolute(sourceImage) === requestedImage;
+      })
+      .sort((left, right) => String(left.registered_at ?? "").localeCompare(String(right.registered_at ?? "")));
+
+    if (!candidates.length) {
+      appendLog(`FIFO prepare found no pending image${args.image ? ` for ${args.image}` : ""}.`);
+      return;
+    }
+
+    fifoTargetNames = new Set([candidates[0].final_name]);
+    appendLog(`FIFO prepare selected ${candidates[0].final_name}.`);
+  }
+
   const buckets: Record<string, string[]> = {
     x2: [],
     x3: [],
@@ -354,6 +415,9 @@ function main(): void {
 
   for (const entry of Object.values(registry.images)) {
     if (entry.upscaled) {
+      continue;
+    }
+    if (fifoTargetNames && !fifoTargetNames.has(entry.final_name)) {
       continue;
     }
     const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
@@ -378,6 +442,10 @@ function main(): void {
     entry.upscaled_path = windowsRelative(copied.imagePath);
     entry.upscaled_dimensions = dims;
     entry.upscaled_at = new Date().toISOString();
+    entry.adobe_stock_status = "ready_for_metadata_apply";
+    if (args.mode === "fifo") {
+      appendLog(`FIFO prepare complete for ${finalName}. Output=${entry.upscaled_path}.`);
+    }
   }
 
   const cli = upscalerState.cli_binary_path;
@@ -440,14 +508,23 @@ function main(): void {
       entry.upscaled_path = windowsRelative(outputImage);
       entry.upscaled_dimensions = readDimensions(outputImage);
       entry.upscaled_at = new Date().toISOString();
+      entry.adobe_stock_status = "ready_for_metadata_apply";
+      if (args.mode === "fifo") {
+        appendLog(`FIFO prepare complete for ${finalName}. Output=${entry.upscaled_path}.`);
+      }
     }
   }
 
   registry.last_updated = new Date().toISOString();
   registry.total_images = Object.keys(registry.images).length;
   writeJson(IMAGE_REGISTRY_PATH, registry);
-  appendLog(`02 pipeline complete. Registry=${registry.total_images}, output=${windowsRelative(OUTPUT_DIR)}.`);
-  appendUpscalerLog(`02 pipeline complete. Output=${windowsRelative(OUTPUT_DIR)}.`);
+  if (args.mode === "fifo") {
+    appendLog(`FIFO prepare run complete. Registry=${registry.total_images}, output=${windowsRelative(OUTPUT_DIR)}.`);
+    appendUpscalerLog(`FIFO prepare run complete. Output=${windowsRelative(OUTPUT_DIR)}.`);
+  } else {
+    appendLog(`02 pipeline complete. Registry=${registry.total_images}, output=${windowsRelative(OUTPUT_DIR)}.`);
+    appendUpscalerLog(`02 pipeline complete. Output=${windowsRelative(OUTPUT_DIR)}.`);
+  }
 }
 
 main();
