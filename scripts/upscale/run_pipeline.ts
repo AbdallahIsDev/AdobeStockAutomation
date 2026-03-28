@@ -224,13 +224,11 @@ function createSidecar(sidecarPath: string, imageFile: string, source: "ai_gener
     trend_category: null,
     loop_index: null,
     adobe_stock_metadata: {
-      title: source === "manual"
-        ? "[NEEDS MANUAL REVIEW - set by file 04_METADATA_OPTIMIZER.md]"
-        : "[STUB - verify before upload]",
+      title: "",
       title_char_count: 0,
       keywords: [],
       keyword_count: 0,
-      category: "[NEEDS REVIEW]",
+      category: "",
       file_type: "Photos",
       created_with_ai: source === "ai_generated",
       people_are_fictional: source === "ai_generated",
@@ -243,7 +241,8 @@ function createSidecar(sidecarPath: string, imageFile: string, source: "ai_gener
       commercial_use_cases: [],
       visual_keywords_from_trend: [],
     },
-    status: "stub_created_pending_review",
+    metadata_generation_mode: source === "manual" ? "auto_from_visual_analysis_in_file_04" : "verify_existing_metadata",
+    status: source === "manual" ? "pending_auto_metadata_generation" : "stub_created_pending_review",
     applied_to_adobe_stock: false,
   };
   writeJson(sidecarPath, sidecar);
