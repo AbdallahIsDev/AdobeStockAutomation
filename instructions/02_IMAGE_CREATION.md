@@ -195,6 +195,21 @@ Background file watcher:
   - if `session_state.pipeline_mode = full_system` and `session_state.post_download_policy = fifo_upscale_prepare`, immediately run `powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action fifo -ImagePath "[saved_path]"`
   - if `session_state.pipeline_mode = stage_only`, stop at download + sidecar only
 
+Failure JSON trigger:
+
+- do not hand-write failed-image JSON in this file
+- failed download records are created automatically by the download runtime command:
+
+```text
+npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download
+```
+
+- that command writes `downloads\failed\[YYYY-MM-DD]\[asset_name]\[asset_name].failure.json`
+- the failure JSON uses:
+  - `reason_code = image_download_failed`
+  - `reason_detail =` the real download error or fallback failure detail
+- any related partial file is moved there automatically
+
 Step 3 complete signal:
 
 - all rendered 16:9 images are confirmed in `downloaded_images`

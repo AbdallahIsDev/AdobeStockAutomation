@@ -115,6 +115,18 @@ Failure quarantine rule:
 - if an image fails metadata generation, upscale execution, or output verification, move it to `downloads\failed\[YYYY-MM-DD]\[asset_name]\`
 - move the image and any matching `.metadata.json`
 - write a `.failure.json` marker in the same folder with the reason
+- do not hand-write this failure JSON; it is created automatically by the runtime command that failed:
+
+```text
+Batch failures: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action batch
+FIFO failures:  powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action fifo -ImagePath "[saved_path]"
+```
+
+- the failure JSON uses a fixed `reason_code` plus a separate `reason_detail`
+- current File 03 reason codes:
+  - `manual_metadata_incomplete`
+  - `upscale_cli_failed`
+  - `upscale_output_missing`
 
 Registry fields to maintain per entry:
 

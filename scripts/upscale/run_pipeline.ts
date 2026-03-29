@@ -296,10 +296,16 @@ function copyWithSidecar(sourceImage: string, sourceSidecar: string | null, dest
   return { imagePath: destImage, sidecarPath: destSidecar };
 }
 
-function quarantineImage(sourceImage: string, sourceSidecar: string | null, reason: string): void {
+function quarantineImage(
+  sourceImage: string,
+  sourceSidecar: string | null,
+  reasonCode: string,
+  reasonDetail?: string | null,
+): void {
   const result = quarantineFailedAsset({
     assetKey: path.parse(path.basename(sourceImage)).name,
-    reason,
+    reasonCode,
+    reasonDetail,
     relatedPaths: [sourceImage, sourceSidecar],
     extra: {
       source_stage: "03_IMAGE_UPSCALER",
@@ -307,7 +313,7 @@ function quarantineImage(sourceImage: string, sourceSidecar: string | null, reas
   });
 
   appendLog(
-    `Moved failed asset to ${windowsRelative(result.folderPath)} | reason=${reason}`,
+    `Moved failed asset to ${windowsRelative(result.folderPath)} | reason_code=${reasonCode}${reasonDetail ? ` | reason_detail=${reasonDetail}` : ""}`,
   );
 }
 
@@ -449,7 +455,8 @@ function main(): void {
         quarantineImage(
           sourceImage,
           sourceSidecar,
-          `manual_metadata_incomplete:${status ?? "missing"}`,
+          "manual_metadata_incomplete",
+          status ?? "missing",
         );
         entry.adobe_stock_status = "failed_moved_to_downloads_failed";
         entry.quality_flag = "failed_before_upscale";
@@ -532,7 +539,12 @@ function main(): void {
         const entry = registry.images[finalName];
         const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
         const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
-        quarantineImage(sourceImage, sourceSidecar, `upscale_cli_failed:${bucket}:exit_${result.status ?? -1}`);
+        quarantineImage(
+          sourceImage,
+          sourceSidecar,
+          "upscale_cli_failed",
+          `${bucket}:exit_${result.status ?? -1}`,
+        );
         entry.adobe_stock_status = "failed_moved_to_downloads_failed";
         entry.quality_flag = "upscale_failed";
       }
@@ -546,7 +558,7 @@ function main(): void {
       if (!fs.existsSync(outputImage)) {
         appendLog(`Upscaled output missing for ${finalName} in batch ${bucket}.`);
         const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
-        quarantineImage(sourceImage, sourceSidecar, `upscale_output_missing:${bucket}`);
+        quarantineImage(sourceImage, sourceSidecar, "upscale_output_missing", bucket);
         entry.adobe_stock_status = "failed_moved_to_downloads_failed";
         entry.quality_flag = "upscale_failed";
         continue;

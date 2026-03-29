@@ -122,10 +122,18 @@ function buildTargetPath(suggestedFilename: string, mediaName: string, mode: "2K
   return path.join(dir, `${stem}__${mode}__${mediaName}${ext}`);
 }
 
-function writeFailureRecord(mediaName: string, reason: string, bodySnippet: string, mode: string, savedPath?: string | null): void {
+function writeFailureRecord(
+  mediaName: string,
+  reasonCode: string,
+  reasonDetail: string,
+  bodySnippet: string,
+  mode: string,
+  savedPath?: string | null,
+): void {
   quarantineFailedAsset({
     assetKey: mediaName,
-    reason,
+    reasonCode,
+    reasonDetail,
     relatedPaths: [savedPath],
     timestamp: timestampIso(),
     extra: {
@@ -521,7 +529,14 @@ async function main(): Promise<void> {
     ].filter(Boolean).join(" | ");
 
     appendLog(`${timestampIso()} Download failed for ${image.mediaName}. ${failureReason}`);
-    writeFailureRecord(image.mediaName, failureReason, fallbackResult.bodySnippet, "download", fallbackResult.savedPath);
+    writeFailureRecord(
+      image.mediaName,
+      "image_download_failed",
+      failureReason,
+      fallbackResult.bodySnippet,
+      "download",
+      fallbackResult.savedPath,
+    );
     session.errors = [...(session.errors ?? []), `Download failed for ${image.mediaName}: ${failureReason}`];
     results.push({
       media_name: image.mediaName,

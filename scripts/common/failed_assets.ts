@@ -4,7 +4,8 @@ import { FAILED_DOWNLOADS_DIR, ROOT } from "../project_paths";
 
 type FailedAssetOptions = {
   assetKey: string;
-  reason: string;
+  reasonCode: string;
+  reasonDetail?: string | null;
   relatedPaths?: Array<string | null | undefined>;
   timestamp?: string;
   extra?: Record<string, unknown>;
@@ -60,7 +61,8 @@ export function quarantineFailedAsset(options: FailedAssetOptions): FailedAssetR
     `${JSON.stringify(
       {
         failed_at: options.timestamp ?? new Date().toISOString(),
-        reason: options.reason,
+        reason_code: options.reasonCode,
+        reason_detail: options.reasonDetail ?? null,
         folder_path: windowsRelative(folderPath),
         related_files: movedPaths.map((filePath) => windowsRelative(filePath)),
         ...(options.extra ?? {}),

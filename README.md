@@ -160,6 +160,7 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 - Stage-only image-creation runs stay in download-only mode and do not auto-trigger FIFO upscale.
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.
 - File 03 must reconcile manual images dropped into `downloads/manual/`, generate their full metadata, and only then upscale them.
+- Failed-asset `.failure.json` files are auto-created by the Flow and Upscale runtime commands; they are not written manually in the markdown instructions.
 
 ## Current Layout
 
