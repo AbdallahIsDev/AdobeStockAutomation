@@ -11,7 +11,7 @@ This file owns:
 
 - description generation
 - Flow browser automation
-- rolling generation/download loop
+- rolling generation/download/upscale trigger loop
 - rate-limit handling
 - account switching
 - metadata sidecar creation
@@ -120,7 +120,9 @@ C:\Users\11\browser-automation-core\launch_browser.bat
 Rules:
 
 - never launch a raw Chrome process directly
+- start the debug browser by running `launch_browser.bat` with no extra arguments
 - connect to the existing debug browser if port 9222 is already ready
+- if the Flow page is not already open, the runtime should open Flow or the saved project URL after connecting
 - find tabs by URL pattern, never by title
 - discover selectors once, then cache them in `selectors_registry.json`
 - for dynamic menus, trigger first, wait for DOM change, then resolve selectors
@@ -148,7 +150,7 @@ Current model priority:
 
 ## SUB-AGENT SYSTEM
 
-Use sub-agents when the runtime supports them.
+Do not skip the sub-agent system.
 
 - Sub-Agent A - Prompt builder
   Converts ranked trends into the full 8-slot prompt set and updates `descriptions.json`.
@@ -159,7 +161,7 @@ Use sub-agents when the runtime supports them.
 - Sub-Agent D - Metadata sidecar writer
   Writes `[image_path].metadata.json` as soon as each download is confirmed.
 
-If sub-agents are unavailable, execute the same order sequentially in one run.
+If true parallel sub-agents are unavailable, preserve the same four roles sequentially. Do not collapse them into one vague stage.
 
 ---
 
@@ -173,18 +175,26 @@ For each ranked trend:
 2. Keep quantity at `x1`
 3. Wait 1 second between submissions
 4. Do not wait for each render before sending the next slot
+5. In full-system runs, do not block on `--wait-for-outcomes` before moving the pipeline forward
+6. Once the current 4-prompt group is queued, the rolling downloader may start harvesting completed renders while the next group is being prepared
 
 ### Phase 2 - Wait and download 16:9
 
-1. Poll the gallery every 10 seconds
-2. Max wait: 3 minutes
-3. Download every successful render immediately
+1. Start the rolling downloader immediately after submission begins
+2. Do not wait for all 4 images to finish rendering
+3. Download each image the moment it becomes render-ready
 4. Prefer `2K` download
 5. If the same image fails `2K` twice, use `1X` and mark that fallback in sidecar/state
+6. Keep only a 1-second gap between download requests
+7. Ignore every image that existed in the Flow project before this session's current batch
+8. Only download media IDs recorded in `session_state.current_16x9_rendered`, `session_state.current_1x1_rendered`, or `session_state.last_render_batch.rendered_media`
+9. Download order must be bottom-to-top, then right-to-left so the newest renders are handled first
+10. The current batch is defined by the newest visible batch at the top of the active Flow project, but the download pass must still harvest that batch from bottom-to-top and right-to-left
 
 Background file watcher:
 
 - monitor the system downloads folder continuously during the session
+- treat only the current session batch as valid download targets; previous-session Flow renders in the same project must be ignored completely
 - when a new file appears:
   - rename it to `[trend_topic]_[series_slot]_L[loop_index]_[seq]_[date].png`
   - move it to `PROJECT_ROOT\downloads\[session_date]\`
@@ -192,8 +202,23 @@ Background file watcher:
   - update `session_state.downloaded_images`
   - increment `images_downloaded_count`
   - log `Downloaded + metadata written: [filename]`
-  - if `session_state.pipeline_mode = full_system` and `session_state.post_download_policy = fifo_upscale_prepare`, immediately run `powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action fifo -ImagePath "[saved_path]"`
-  - if `session_state.pipeline_mode = stage_only`, stop at download + sidecar only
+  - if `session_state.post_download_policy = fifo_upscale_prepare`, immediately queue `powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action fifo -ImagePath "[saved_path]"` in the background and continue downloading the next ready image without waiting for upscale completion
+  - FIFO background prepare is the default for this project, including stage-only image-creation runs, unless a slower recovery run explicitly changes the policy
+
+Full-system rolling command surface:
+
+```text
+Submit batch:          npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=submit-batch --prompt-ids=... --aspect=16:9|1:1
+Rolling downloader:    npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-nonblocking
+Recovery sweep only:   npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download
+```
+
+Rule:
+
+- prefer `download-nonblocking`
+- use `download` only as a slower recovery sweep
+- both commands must filter against the current batch media IDs stored in `session_state.json`; they must not sweep old project renders
+- submit the next prompt group without waiting for the previous group to fully render
 
 Failure JSON trigger:
 
@@ -212,7 +237,7 @@ npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download
 
 Step 3 complete signal:
 
-- all rendered 16:9 images are confirmed in `downloaded_images`
+- all currently rendered 16:9 images are confirmed in `downloaded_images`
 - or 60 seconds pass since the last upscale request with no more pending renders
 - then log `16:9 group for [trend_topic] complete. [N] images downloaded.`
 - then proceed to the 1:1 group

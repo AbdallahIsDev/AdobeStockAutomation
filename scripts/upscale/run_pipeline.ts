@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { quarantineFailedAsset } from "../common/failed_assets";
+import { compactDateStamp, dateFolderName, jsonTimestamp } from "../common/time";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -58,7 +59,7 @@ type CliArgs = {
 };
 
 const UPSCALER_LOG_PATH = AUTOMATION_LOG_PATH;
-const OUTPUT_DIR = path.join(DOWNLOADS_DIR, "upscaled", new Date().toISOString().slice(0, 10));
+const OUTPUT_DIR = path.join(DOWNLOADS_DIR, "upscaled", dateFolderName());
 const MANUAL_DIR = path.join(DOWNLOADS_DIR, "manual");
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"]);
@@ -104,16 +105,12 @@ function writeJson(filePath: string, value: unknown): void {
 
 function appendLog(message: string): void {
   fs.mkdirSync(path.dirname(AUTOMATION_LOG_PATH), { recursive: true });
-  const now = new Date();
-  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
 }
 
 function appendUpscalerLog(message: string): void {
   fs.mkdirSync(path.dirname(UPSCALER_LOG_PATH), { recursive: true });
-  const now = new Date();
-  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
-  fs.appendFileSync(UPSCALER_LOG_PATH, `${stamp} ${message}\n`, "utf8");
+  fs.appendFileSync(UPSCALER_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
 }
 
 function windowsRelative(filePath: string): string {
@@ -139,7 +136,7 @@ function slugify(value: string): string {
 }
 
 function todayStamp(): string {
-  return new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  return compactDateStamp();
 }
 
 function assignedScale(longSide: number): number | "copy_only" | "low_res" {
@@ -217,7 +214,7 @@ function createSidecar(sidecarPath: string, imageFile: string, source: "ai_gener
   const dims = entry.dimensions ?? null;
   const sidecar = {
     image_file: imageFile,
-    generated_at: entry.registered_at ?? new Date().toISOString(),
+    generated_at: entry.registered_at ?? jsonTimestamp(),
     source,
     series_slot: entry.series_slot ?? null,
     aspect_ratio: dims ? `${dims.width}:${dims.height}` : "unknown",
@@ -323,13 +320,13 @@ function main(): void {
   ensureFolder(OUTPUT_DIR);
 
   const existingRegistry = readJson<RegistryFile>(IMAGE_REGISTRY_PATH, {
-    last_updated: new Date().toISOString(),
+    last_updated: jsonTimestamp(),
     total_images: 0,
     images: {},
   });
   const upscalerState = readJson<UpscalerState>(UPSCALER_STATE_PATH, {});
   const registry: RegistryFile = {
-    last_updated: new Date().toISOString(),
+    last_updated: jsonTimestamp(),
     total_images: 0,
     images: {},
   };
@@ -371,7 +368,7 @@ function main(): void {
       createSidecar(sidecarPath, finalName, source, {
         ...existing,
         dimensions: dims,
-        registered_at: existing?.registered_at ?? new Date().toISOString(),
+        registered_at: existing?.registered_at ?? jsonTimestamp(),
       });
       sidecarsCreated += 1;
       appendLog(`Created missing sidecar for ${finalName}.`);
@@ -389,7 +386,7 @@ function main(): void {
       upscaled: existing?.upscaled ?? false,
       upscaled_path: existing?.upscaled_path ?? null,
       upscaled_dimensions: existing?.upscaled_dimensions ?? null,
-      registered_at: existing?.registered_at ?? new Date().toISOString(),
+      registered_at: existing?.registered_at ?? jsonTimestamp(),
       upscaled_at: existing?.upscaled_at ?? null,
       adobe_stock_status: existing?.adobe_stock_status ?? "not_uploaded",
       quality_flag: scale === "low_res" ? "review_before_upload" : existing?.quality_flag,
@@ -401,7 +398,7 @@ function main(): void {
   }
 
   registry.total_images = Object.keys(registry.images).length;
-  registry.last_updated = new Date().toISOString();
+  registry.last_updated = jsonTimestamp();
   writeJson(IMAGE_REGISTRY_PATH, registry);
 
   const imageCount = allImages.length;
@@ -414,9 +411,12 @@ function main(): void {
 
   clearStaging();
 
+  const requestedImage = args.mode === "fifo" && args.image
+    ? normalizedAbsolute(args.image)
+    : null;
+
   let fifoTargetNames: Set<string> | null = null;
   if (args.mode === "fifo") {
-    const requestedImage = args.image ? normalizedAbsolute(args.image) : null;
     const candidates = Object.values(registry.images)
       .filter((entry) => !entry.upscaled)
       .filter((entry) => entry.source === "ai_generated")
@@ -444,6 +444,10 @@ function main(): void {
   };
 
   for (const entry of Object.values(registry.images)) {
+    const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+    if (requestedImage && normalizedAbsolute(sourceImage) !== requestedImage) {
+      continue;
+    }
     if (entry.upscaled) {
       continue;
     }
@@ -451,7 +455,6 @@ function main(): void {
       const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
       const status = readSidecarStatus(sourceSidecar);
       if (status !== "ready_for_upload") {
-        const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
         quarantineImage(
           sourceImage,
           sourceSidecar,
@@ -466,7 +469,6 @@ function main(): void {
     if (fifoTargetNames && !fifoTargetNames.has(entry.final_name)) {
       continue;
     }
-    const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
     if (!fs.existsSync(sourceImage)) {
       continue;
     }
@@ -487,7 +489,7 @@ function main(): void {
     entry.upscaled = true;
     entry.upscaled_path = windowsRelative(copied.imagePath);
     entry.upscaled_dimensions = dims;
-    entry.upscaled_at = new Date().toISOString();
+    entry.upscaled_at = jsonTimestamp();
     entry.adobe_stock_status = "ready_for_metadata_apply";
     if (args.mode === "fifo") {
       appendLog(`FIFO prepare complete for ${finalName}. Output=${entry.upscaled_path}.`);
@@ -570,7 +572,7 @@ function main(): void {
       entry.upscaled = true;
       entry.upscaled_path = windowsRelative(outputImage);
       entry.upscaled_dimensions = readDimensions(outputImage);
-      entry.upscaled_at = new Date().toISOString();
+      entry.upscaled_at = jsonTimestamp();
       entry.adobe_stock_status = "ready_for_metadata_apply";
       if (args.mode === "fifo") {
         appendLog(`FIFO prepare complete for ${finalName}. Output=${entry.upscaled_path}.`);
@@ -578,7 +580,7 @@ function main(): void {
     }
   }
 
-  registry.last_updated = new Date().toISOString();
+  registry.last_updated = jsonTimestamp();
   registry.total_images = Object.keys(registry.images).length;
   writeJson(IMAGE_REGISTRY_PATH, registry);
   if (args.mode === "fifo") {

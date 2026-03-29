@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Page } from "playwright";
-import { connectBrowser, findPageByUrl, isDebugPortReady, waitForElement } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, getOrOpenPage, isDebugPortReady, waitForElement } from "../../../../../browser-automation-core/browser_core";
 import { AUTOMATION_LOG_PATH, DESCRIPTIONS_PATH, SESSION_STATE_PATH } from "../project_paths";
+import { jsonTimestamp } from "../common/time";
 
 type Description = {
   id: number;
@@ -24,9 +25,12 @@ type GeneratedImage = {
   mediaName: string;
   tileId: string | null;
   href: string | null;
+  top: number;
+  left: number;
 };
 
 type SessionState = {
+  current_project_url?: string;
   current_project_id?: string;
   current_aspect_ratio?: string;
   current_step?: string;
@@ -66,9 +70,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  const now = new Date();
-  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
 }
 
 function normalize(value: string | null | undefined): string {
@@ -192,14 +194,29 @@ async function getGeneratedImages(page: Page): Promise<GeneratedImage[]> {
       }
       const tile = img.closest("[data-tile-id]");
       const anchor = img.closest("a");
+      const rect = img.getBoundingClientRect();
       return {
         index,
         mediaName,
         tileId: tile?.getAttribute("data-tile-id") || null,
         href: anchor?.getAttribute("href") || null,
+        top: rect.top,
+        left: rect.left,
       };
     }).filter((item) => item.mediaName);
   }, GENERATED_IMAGE_SELECTOR);
+}
+
+function sortVisualNewestFirst(images: GeneratedImage[]): GeneratedImage[] {
+  return [...images].sort((a, b) => {
+    if (a.top !== b.top) {
+      return a.top - b.top;
+    }
+    if (a.left !== b.left) {
+      return a.left - b.left;
+    }
+    return a.index - b.index;
+  });
 }
 
 async function countPolicyViolationTiles(page: Page): Promise<number> {
@@ -270,10 +287,9 @@ async function main(): Promise<void> {
   const session = readJson<SessionState>(SESSION_STATE_PATH, {});
   const browser = await connectBrowser(9222);
   try {
-    const page = findPageByUrl(browser, session.current_project_id ? `/fx/tools/flow/project/${session.current_project_id}` : "/fx/tools/flow/project/");
-    if (!page) {
-      throw new Error("Flow project page not found.");
-    }
+    const urlPattern = session.current_project_id ? `/fx/tools/flow/project/${session.current_project_id}` : "/fx/tools/flow";
+    const openUrl = session.current_project_url || "https://labs.google/fx/tools/flow";
+    const page = await getOrOpenPage(browser, urlPattern, openUrl);
 
     await page.bringToFront();
     await dismissToast(page);
@@ -283,7 +299,7 @@ async function main(): Promise<void> {
 
     await ensureAspectRatio(page, aspectRatio);
 
-    const existingImages = await getGeneratedImages(page);
+    const existingImages = sortVisualNewestFirst(await getGeneratedImages(page));
     const existingMedia = new Set(existingImages.map((image) => image.mediaName));
     const baselinePolicyViolations = await countPolicyViolationTiles(page);
 
@@ -306,8 +322,8 @@ async function main(): Promise<void> {
       aspect_ratio: aspectRatio,
       rendered_media: [],
       failed_prompts: [],
-      submitted_at: new Date().toISOString(),
-      captured_at: new Date().toISOString(),
+      submitted_at: jsonTimestamp(),
+      captured_at: jsonTimestamp(),
     };
     writeJson(SESSION_STATE_PATH, session);
 
@@ -319,7 +335,7 @@ async function main(): Promise<void> {
     const deadline = Date.now() + (20 * 60 * 1000);
     let policyViolationCount = 0;
     while (Date.now() < deadline) {
-      const freshImages = (await getGeneratedImages(page)).filter((image) => !existingMedia.has(image.mediaName));
+      const freshImages = sortVisualNewestFirst(await getGeneratedImages(page)).filter((image) => !existingMedia.has(image.mediaName));
       policyViolationCount = Math.max(0, (await countPolicyViolationTiles(page)) - baselinePolicyViolations);
       if (freshImages.length + policyViolationCount >= promptIds.length) {
         break;
@@ -327,7 +343,7 @@ async function main(): Promise<void> {
       await sleep(2000);
     }
 
-    const allImages = await getGeneratedImages(page);
+    const allImages = sortVisualNewestFirst(await getGeneratedImages(page));
     const newImages = allImages.filter((image) => !existingMedia.has(image.mediaName)).slice(0, promptIds.length);
     const failedPromptIds = promptIds.slice(newImages.length, newImages.length + policyViolationCount);
 
@@ -349,8 +365,8 @@ async function main(): Promise<void> {
         reason: "policy_violation",
         message: "This generation might violate our policies. Please try a different prompt or send feedback.",
       })),
-      submitted_at: session.last_render_batch?.submitted_at ?? new Date().toISOString(),
-      captured_at: new Date().toISOString(),
+      submitted_at: session.last_render_batch?.submitted_at ?? jsonTimestamp(),
+      captured_at: jsonTimestamp(),
     };
     writeJson(SESSION_STATE_PATH, session);
 

@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import type { Download, Page } from "playwright";
 import {
   connectBrowser,
-  findPageByUrl,
+  getOrOpenPage,
   isDebugPortReady,
   screenshotElement,
   waitForElement,
@@ -12,11 +13,13 @@ import { quarantineFailedAsset } from "../common/failed_assets";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
+  DESCRIPTIONS_PATH,
   DOWNLOADS_DIR,
   LOGS_DIR,
   SCREENSHOTS_DIR,
   SESSION_STATE_PATH,
 } from "../project_paths";
+import { dateFolderName, jsonTimestamp } from "../common/time";
 
 type Json = Record<string, unknown>;
 
@@ -24,10 +27,30 @@ type SessionState = {
   session_date?: string;
   current_project_url?: string;
   current_project_id?: string;
+  pipeline_mode?: string;
+  post_download_policy?: string;
+  loop_index?: number;
   current_step?: string;
   images_downloaded_count?: number;
   downloaded_images?: Json[];
   errors?: string[];
+  current_16x9_rendered?: string[];
+  current_1x1_rendered?: string[];
+  last_render_batch?: {
+    prompt_ids?: number[];
+    aspect_ratio?: string;
+    rendered_media?: Array<{
+      media_name?: string;
+      href?: string | null;
+      tile_id?: string | null;
+    }>;
+  };
+};
+
+type Description = {
+  id: number;
+  trend_topic?: string;
+  series_slot?: string;
 };
 
 type SelectorRegistry = {
@@ -52,6 +75,14 @@ type GeneratedImage = {
   mediaName: string;
   tileId: string | null;
   href: string | null;
+  top: number;
+  left: number;
+};
+
+type CurrentBatchTarget = {
+  media_name: string;
+  href?: string | null;
+  tile_id?: string | null;
 };
 
 type DownloadAttemptResult =
@@ -75,6 +106,7 @@ type DownloadAttemptResult =
 const ROOT = process.cwd();
 const SELECTORS_REGISTRY_PATH = path.join(DATA_DIR, "selectors_registry.json");
 const BROWSER_PROBE_PATH = path.join(DATA_DIR, "browser_probe.json");
+const UPSCALE_RUNTIME_PATH = path.join(ROOT, "scripts", "upscale_runtime.ps1");
 const CDP_PORT = 9222;
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
 
@@ -97,12 +129,7 @@ function appendLog(line: string): void {
 }
 
 function timestampIso(): string {
-  const now = new Date();
-  return `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
-}
-
-function dateFolderName(): string {
-  return new Date().toISOString().slice(0, 10);
+  return jsonTimestamp();
 }
 
 function sanitizeFileStem(value: string): string {
@@ -113,9 +140,20 @@ function sanitizeFileStem(value: string): string {
     .slice(0, 80) || "flow_image";
 }
 
-function buildTargetPath(suggestedFilename: string, mediaName: string, mode: "2K" | "1X"): string {
+function compactTimestamp(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}${hh}${mi}${ss}`;
+}
+
+function buildTargetPath(suggestedFilename: string, mediaName: string, mode: "2K" | "1X", deterministicStem?: string | null): string {
   const parsed = path.parse(suggestedFilename || "flow_image.png");
-  const stem = sanitizeFileStem(parsed.name || "flow_image");
+  const stem = sanitizeFileStem(deterministicStem || parsed.name || "flow_image");
   const ext = parsed.ext || ".png";
   const dir = path.join(DOWNLOADS_DIR, dateFolderName());
   fs.mkdirSync(dir, { recursive: true });
@@ -220,14 +258,82 @@ async function getGeneratedImages(page: Page): Promise<GeneratedImage[]> {
       }
       const tile = img.closest("[data-tile-id]");
       const anchor = img.closest("a");
+      const rect = img.getBoundingClientRect();
       return {
         index,
         mediaName,
         tileId: tile?.getAttribute("data-tile-id") || null,
         href: anchor?.getAttribute("href") || null,
+        top: rect.top,
+        left: rect.left,
       };
     }).filter((item) => item.mediaName);
   }, GENERATED_IMAGE_SELECTOR);
+}
+
+function sortNewestFirst(images: GeneratedImage[]): GeneratedImage[] {
+  return [...images].sort((a, b) => {
+    if (a.top !== b.top) {
+      return b.top - a.top;
+    }
+    if (a.left !== b.left) {
+      return b.left - a.left;
+    }
+    return b.index - a.index;
+  });
+}
+
+function getCurrentBatchMediaNames(session: SessionState): Set<string> {
+  const set = new Set<string>();
+  for (const item of session.last_render_batch?.rendered_media ?? []) {
+    if (item?.media_name) {
+      set.add(item.media_name);
+    }
+  }
+  for (const mediaName of session.current_16x9_rendered ?? []) {
+    if (mediaName) {
+      set.add(mediaName);
+    }
+  }
+  for (const mediaName of session.current_1x1_rendered ?? []) {
+    if (mediaName) {
+      set.add(mediaName);
+    }
+  }
+  return set;
+}
+
+function getCurrentBatchTargets(session: SessionState): Map<string, CurrentBatchTarget> {
+  const map = new Map<string, CurrentBatchTarget>();
+  for (const item of session.last_render_batch?.rendered_media ?? []) {
+    if (item?.media_name) {
+      map.set(item.media_name, {
+        media_name: item.media_name,
+        href: item.href ?? null,
+        tile_id: item.tile_id ?? null,
+      });
+    }
+  }
+  return map;
+}
+
+function buildDeterministicStem(
+  mediaName: string,
+  session: SessionState,
+  currentBatchTargets: Map<string, CurrentBatchTarget>,
+  descriptionsById: Map<number, Description>,
+): string | null {
+  const renderedMedia = session.last_render_batch?.rendered_media ?? [];
+  const promptInfo = renderedMedia.find((item) => item.media_name === mediaName);
+  const promptId = typeof promptInfo?.prompt_id === "number" ? promptInfo.prompt_id : null;
+  if (promptId == null) {
+    return null;
+  }
+  const description = descriptionsById.get(promptId);
+  const trendSlug = sanitizeFileStem(description?.trend_topic || "flow_image");
+  const seriesSlot = sanitizeFileStem(description?.series_slot || "slot");
+  const loopIndex = String(session.loop_index ?? 1).padStart(3, "0");
+  return `${trendSlug}_${seriesSlot}_L${loopIndex}_${compactTimestamp()}`;
 }
 
 async function openDownloadSubmenu(page: Page, mediaName: string): Promise<{ ok: boolean; error?: string; options?: string[] }> {
@@ -409,6 +515,27 @@ function markDownloaded(session: SessionState, image: GeneratedImage, result: Ex
   });
   session.downloaded_images = downloaded;
   session.images_downloaded_count = downloaded.length;
+  if (session.post_download_policy === "fifo_upscale_prepare") {
+    spawn(
+      "powershell",
+      [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        UPSCALE_RUNTIME_PATH,
+        "-Action",
+        "fifo",
+        "-ImagePath",
+        result.savedPath,
+      ],
+      {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      },
+    ).unref();
+    appendLog(`${timestampIso()} Queued FIFO prepare for ${image.mediaName} -> ${result.savedPath}.`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -419,6 +546,8 @@ async function main(): Promise<void> {
   fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
   const session = readJsonFile<SessionState>(SESSION_STATE_PATH, {});
+  const descriptionsPayload = readJsonFile<{ descriptions?: Description[] }>(DESCRIPTIONS_PATH, { descriptions: [] });
+  const descriptionsById = new Map((descriptionsPayload.descriptions ?? []).map((item) => [item.id, item]));
   const browserProbe = readJsonFile<BrowserProbe>(BROWSER_PROBE_PATH, {
     cdp_port: CDP_PORT,
     evidence: [],
@@ -428,12 +557,9 @@ async function main(): Promise<void> {
   const browser = await connectBrowser(CDP_PORT);
   const urlPattern = session.current_project_id
     ? `/fx/tools/flow/project/${session.current_project_id}`
-    : "/fx/tools/flow/project/";
-  const page = findPageByUrl(browser, urlPattern);
-
-  if (!page) {
-    throw new Error(`No open Flow tab found matching ${urlPattern}`);
-  }
+    : "/fx/tools/flow";
+  const openUrl = session.current_project_url || "https://labs.google/fx/tools/flow";
+  const page = await getOrOpenPage(browser, urlPattern, openUrl);
 
   await page.bringToFront();
   await page.waitForLoadState("domcontentloaded");
@@ -445,13 +571,33 @@ async function main(): Promise<void> {
 
   await ensureSelectors(page);
 
-  const allImages = await getGeneratedImages(page);
+  const allImages = sortNewestFirst(await getGeneratedImages(page));
   const alreadyDownloaded = new Set(
     (session.downloaded_images ?? [])
       .map((item) => String((item as Json).media_name ?? ""))
       .filter(Boolean),
   );
-  const pendingImages = allImages.filter((image) => !alreadyDownloaded.has(image.mediaName));
+  const currentBatchMediaNames = getCurrentBatchMediaNames(session);
+  const currentBatchTargets = getCurrentBatchTargets(session);
+  const pendingImages = (currentBatchMediaNames.size
+    ? allImages.filter((image) => {
+      if (!currentBatchMediaNames.has(image.mediaName)) {
+        return false;
+      }
+      const target = currentBatchTargets.get(image.mediaName);
+      if (!target) {
+        return true;
+      }
+      if (target.tile_id && image.tileId && target.tile_id !== image.tileId) {
+        return false;
+      }
+      if (target.href && image.href && target.href !== image.href) {
+        return false;
+      }
+      return true;
+    })
+    : allImages
+  ).filter((image) => !alreadyDownloaded.has(image.mediaName));
 
   if (!pendingImages.length) {
     appendLog(`${timestampIso()} No new Flow images needed downloading on project ${session.current_project_id ?? "unknown"}.`);
@@ -461,8 +607,10 @@ async function main(): Promise<void> {
   const results: Json[] = [];
 
   for (const image of pendingImages) {
+    appendLog(`${timestampIso()} Preflight exact download target media=${image.mediaName} tile=${image.tileId ?? "null"} href=${image.href ?? "null"} gridTop=${image.top} gridLeft=${image.left}`);
     const screenshotPath = path.join(SCREENSHOTS_DIR, `${image.mediaName}.png`);
     await screenshotElement(page, GENERATED_IMAGE_SELECTOR, screenshotPath);
+    const deterministicStem = buildDeterministicStem(image.mediaName, session, currentBatchTargets, descriptionsById);
 
     let completed = false;
     let lastFailure: DownloadAttemptResult | null = null;
@@ -470,6 +618,15 @@ async function main(): Promise<void> {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const result = await performDownloadAttempt(page, image, "2K", attempt);
       if (result.ok) {
+        if (deterministicStem) {
+          const desiredPath = buildTargetPath(result.suggestedFilename, image.mediaName, result.mode, deterministicStem);
+          if (result.savedPath !== desiredPath) {
+            if (fs.existsSync(result.savedPath)) {
+              fs.renameSync(result.savedPath, desiredPath);
+            }
+            result.savedPath = desiredPath;
+          }
+        }
         const note = result.toastText ?? "2K upscaled download completed successfully.";
         markDownloaded(session, image, result, note);
         results.push({
@@ -501,6 +658,15 @@ async function main(): Promise<void> {
 
     const fallbackResult = await performDownloadAttempt(page, image, "1X", 1);
     if (fallbackResult.ok) {
+      if (deterministicStem) {
+        const desiredPath = buildTargetPath(fallbackResult.suggestedFilename, image.mediaName, fallbackResult.mode, deterministicStem);
+        if (fallbackResult.savedPath !== desiredPath) {
+          if (fs.existsSync(fallbackResult.savedPath)) {
+            fs.renameSync(fallbackResult.savedPath, desiredPath);
+          }
+          fallbackResult.savedPath = desiredPath;
+        }
+      }
       const note = `2K failed twice; downloaded 1X fallback. ${fallbackResult.toastText ?? ""}`.trim();
       markDownloaded(session, image, fallbackResult, note);
       results.push({

@@ -16,7 +16,7 @@ if (-not (Test-Path $sessionStatePath)) {
   & (Join-Path $PSScriptRoot "bootstrap_runtime_state.ps1")
 }
 
-$session = Get-Content $sessionStatePath -Raw | ConvertFrom-Json -Depth 100
+$session = Get-Content $sessionStatePath -Raw | ConvertFrom-Json
 
 if ($Mode -eq "full_system") {
   $session.pipeline_mode = "full_system"
@@ -26,7 +26,7 @@ if ($Mode -eq "full_system") {
   }
 } else {
   $session.pipeline_mode = "stage_only"
-  $session.post_download_policy = "download_only"
+  $session.post_download_policy = "fifo_upscale_prepare"
 }
 
 if ($Stage) {

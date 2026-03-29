@@ -1,4 +1,4 @@
-import { connectBrowser, findPageByUrl, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, findPageByUrl, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
 
 async function main(): Promise<void> {
   const shouldOpenSettings = process.argv.includes("--open-settings");
@@ -10,10 +10,12 @@ async function main(): Promise<void> {
 
   const browser = await connectBrowser(9222);
   try {
-    const page = findPageByUrl(browser, "/fx/tools/flow/project/");
-    if (!page) {
-      throw new Error("Flow project page not found.");
-    }
+    const existingProjectPage = findPageByUrl(browser, "/fx/tools/flow/project/");
+    const page = existingProjectPage ?? await getOrOpenPage(
+      browser,
+      "/fx/tools/flow",
+      "https://labs.google/fx/tools/flow",
+    );
 
     await page.bringToFront();
 
@@ -58,20 +60,20 @@ async function main(): Promise<void> {
       ).catch(() => undefined);
     }
 
-    const snapshot = await page.evaluate(() => {
-      const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+    const snapshot = await page.evaluate(`() => {
+      const normalize = (value) => (value ?? "").replace(/\\s+/g, " ").trim();
 
       const buttons = Array.from(document.querySelectorAll("button")).map((button, index) => ({
         index,
-        text: normalize((button as HTMLButtonElement).innerText),
+        text: normalize(button.innerText),
         ariaLabel: normalize(button.getAttribute("aria-label")),
         title: normalize(button.getAttribute("title")),
-        disabled: (button as HTMLButtonElement).disabled,
+        disabled: !!button.disabled,
         dataset: { ...button.dataset },
       }));
 
-      const textboxes = Array.from(document.querySelectorAll("[role=\"textbox\"], textarea")).map((node, index) => {
-        const element = node as HTMLElement & { value?: string };
+      const textboxes = Array.from(document.querySelectorAll('[role="textbox"], textarea')).map((node, index) => {
+        const element = node;
         return {
           index,
           tag: element.tagName.toLowerCase(),
@@ -83,7 +85,7 @@ async function main(): Promise<void> {
         };
       });
 
-      const menuish = Array.from(document.querySelectorAll("[role=\"menuitem\"], [role=\"option\"], [role=\"tab\"], [role=\"radio\"]")).map((node, index) => ({
+      const menuish = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"], [role="tab"], [role="radio"]')).map((node, index) => ({
         index,
         role: normalize(node.getAttribute("role")),
         text: normalize(node.textContent),
@@ -91,21 +93,21 @@ async function main(): Promise<void> {
         ariaSelected: normalize(node.getAttribute("aria-selected")),
       }));
 
-      const generatedCards = Array.from(document.querySelectorAll("img[alt=\"Generated image\"]")).slice(0, 12).map((image, index) => {
+      const generatedCards = Array.from(document.querySelectorAll('img[alt="Generated image"]')).slice(0, 12).map((image, index) => {
         const src = image.getAttribute("src") || "";
         let mediaName = "";
         try {
           mediaName = new URL(src, window.location.href).searchParams.get("name") || "";
-        } catch {
+        } catch (error) {
           mediaName = "";
         }
         const tile = image.closest("[data-tile-id]");
-        const cardText = normalize(tile?.textContent || image.parentElement?.textContent || "");
+        const cardText = normalize((tile && tile.textContent) || (image.parentElement && image.parentElement.textContent) || "");
         return {
           index,
           mediaName,
-          tileId: tile?.getAttribute("data-tile-id") || "",
-          href: image.closest("a")?.getAttribute("href") || "",
+          tileId: (tile && tile.getAttribute("data-tile-id")) || "",
+          href: (image.closest("a") && image.closest("a").getAttribute("href")) || "",
           cardText: cardText.slice(0, 500),
         };
       });
@@ -119,7 +121,7 @@ async function main(): Promise<void> {
         menuish,
         generatedCards,
       };
-    });
+    }`);
 
     console.log(JSON.stringify(snapshot, null, 2));
   } finally {

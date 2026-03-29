@@ -3,7 +3,7 @@
 
 Use this file as the main execution entrypoint.
 
-If the user says "execute this system" or points to this skill, use this order:
+If the user says "execute Adobe Stock Automation System" or points to this skill, use this order:
 
 ```text
 0. Run PROJECT_ROOT\scripts\session_runtime.ps1 -Action bootstrap once if runtime JSON files are missing.
@@ -32,6 +32,8 @@ Rules:
 - do not execute from memory alone; always open the relevant execution file(s)
 - `instructions\STOCK_SUCCESS_REPORT.md` is the strategy reference
 - `instructions\01_TREND_RESEARCH.md` and `instructions\02_IMAGE_CREATION.md` are separate on purpose
+- File 02 must use the rolling nonblocking download path and FIFO background prepare by default; do not wait for all four images before downloading ready ones
+- do not block on `--wait-for-outcomes` between prompt groups; the next group can be queued while the downloader harvests the newest rendered images from the current group
 - `instructions\03_IMAGE_UPSCALER.md` must generate full metadata for manual images before upscale
 - `instructions\04_METADATA_OPTIMIZER.md` should apply sidecars for all pipeline images and only use visual rebuild for outside-system Adobe uploads
 - if sub-agents are available, follow the sub-agent split defined inside `instructions\01_TREND_RESEARCH.md`

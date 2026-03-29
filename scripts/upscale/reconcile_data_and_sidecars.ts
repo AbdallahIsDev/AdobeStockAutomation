@@ -14,6 +14,7 @@ import {
   TREND_DATA_PATH,
   UPSCALER_STATE_PATH,
 } from "../project_paths";
+import { jsonTimestamp } from "../common/time";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -1531,9 +1532,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  const now = new Date();
-  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
 }
 
 function windowsRelative(filePath: string): string {
@@ -1563,7 +1562,7 @@ function defaultUpscalerState(): JsonRecord {
   const cliBinary = "C:\\Program Files\\Upscayl\\resources\\bin\\upscayl-bin.exe";
   const modelsDir = "C:\\Program Files\\Upscayl\\resources\\models\\";
   return {
-    last_updated: new Date().toISOString(),
+    last_updated: jsonTimestamp(),
     upscayl_exe_path: fs.existsSync(upscaylExe) ? upscaylExe : null,
     method: fs.existsSync(cliBinary) ? "cli" : "gui",
     cli_binary_path: fs.existsSync(cliBinary) ? cliBinary : null,
@@ -1578,7 +1577,7 @@ function defaultUpscalerState(): JsonRecord {
 
 function defaultAdobeStockSelectors(): JsonRecord {
   return {
-    last_updated: new Date().toISOString(),
+    last_updated: jsonTimestamp(),
     selectors_discovered: false,
     site: "contributor.stock.adobe.com",
     selectors: {
@@ -1646,7 +1645,7 @@ function ensureDataFiles(): void {
   }
   if (!fs.existsSync(IMAGE_REGISTRY_PATH)) {
     writeJson(IMAGE_REGISTRY_PATH, {
-      last_updated: new Date().toISOString(),
+      last_updated: jsonTimestamp(),
       total_images: 0,
       images: {},
     });
@@ -1661,7 +1660,7 @@ function main(): void {
   const trendPayload = readJson<{ trends: Trend[] }>(TREND_DATA_PATH, { trends: [] });
   const registry = readJson<{ last_updated: string; total_images: number; images: Record<string, JsonRecord> }>(
     IMAGE_REGISTRY_PATH,
-    { last_updated: new Date().toISOString(), total_images: 0, images: {} },
+    { last_updated: jsonTimestamp(), total_images: 0, images: {} },
   );
 
   const descriptionsById = new Map(descriptionsPayload.descriptions.map((item) => [item.id, item]));
@@ -1700,7 +1699,7 @@ function main(): void {
 
     const sidecar = {
       image_file: imageFile,
-      generated_at: downloaded.downloaded_at ?? new Date().toISOString(),
+      generated_at: downloaded.downloaded_at ?? jsonTimestamp(),
       series_slot: description.series_slot,
       aspect_ratio: description.aspect_ratio,
       trend_topic: description.trend_topic,
@@ -1743,7 +1742,7 @@ function main(): void {
       upscaled: false,
       upscaled_path: null,
       upscaled_dimensions: null,
-      registered_at: downloaded.downloaded_at ?? new Date().toISOString(),
+      registered_at: downloaded.downloaded_at ?? jsonTimestamp(),
       upscaled_at: null,
       adobe_stock_status: "not_uploaded",
       trend_topic: description.trend_topic,
@@ -1779,7 +1778,7 @@ function main(): void {
 
     const sidecar = {
       image_file: imageFile,
-      generated_at: downloaded.downloaded_at ?? new Date().toISOString(),
+      generated_at: downloaded.downloaded_at ?? jsonTimestamp(),
       series_slot: description.series_slot,
       aspect_ratio: description.aspect_ratio,
       trend_topic: description.trend_topic,
@@ -1822,7 +1821,7 @@ function main(): void {
       upscaled: false,
       upscaled_path: null,
       upscaled_dimensions: null,
-      registered_at: downloaded.downloaded_at ?? new Date().toISOString(),
+      registered_at: downloaded.downloaded_at ?? jsonTimestamp(),
       upscaled_at: null,
       adobe_stock_status: "not_uploaded",
       trend_topic: description.trend_topic,
@@ -1833,7 +1832,7 @@ function main(): void {
     highestPromptId = Math.max(highestPromptId, promptId);
   }
 
-  registry.last_updated = new Date().toISOString();
+  registry.last_updated = jsonTimestamp();
   registry.total_images = Object.keys(registry.images).length;
   writeJson(IMAGE_REGISTRY_PATH, registry);
 

@@ -45,6 +45,8 @@ Connect: connectBrowser(9222) via browser_core.ts
 If port 9222 is already ready -> skip launch, connect directly
 ```
 
+Run the launcher with no extra arguments. Do not append a custom port, profile, or URL.
+
 Selector stability order: `data-t` → semantic `name` → semantic `id` → `aria-label` or role → placeholder or text match. Never rely on generated hash classes.
 
 Cache discovered selectors in `adobe_stock_selectors.json`. Re-discover only when a cached selector fails in action.

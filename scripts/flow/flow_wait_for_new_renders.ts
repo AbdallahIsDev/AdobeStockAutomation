@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { connectBrowser, findPageByUrl, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
 import { AUTOMATION_LOG_PATH, SESSION_STATE_PATH } from "../project_paths";
+import { jsonTimestamp } from "../common/time";
 
 type DownloadedImage = {
   media_name: string;
 };
 
 type SessionState = {
+  current_project_url?: string;
   current_project_id?: string;
   current_step?: string;
   current_aspect_ratio?: string;
@@ -41,9 +43,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  const now = new Date();
-  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
 }
 
 function parseArgs(): { expected: number } {
@@ -74,10 +74,9 @@ async function main(): Promise<void> {
 
   const browser = await connectBrowser(9222);
   try {
-    const page = findPageByUrl(browser, session.current_project_id ? `/fx/tools/flow/project/${session.current_project_id}` : "/fx/tools/flow/project/");
-    if (!page) {
-      throw new Error("Flow project page not found.");
-    }
+    const urlPattern = session.current_project_id ? `/fx/tools/flow/project/${session.current_project_id}` : "/fx/tools/flow";
+    const openUrl = session.current_project_url || "https://labs.google/fx/tools/flow";
+    const page = await getOrOpenPage(browser, urlPattern, openUrl);
 
     await page.bringToFront();
     const baselinePolicyViolations = await countPolicyViolationTiles(page);
@@ -136,7 +135,7 @@ async function main(): Promise<void> {
         reason: "policy_violation",
         message: "This generation might violate our policies. Please try a different prompt or send feedback.",
       })),
-      captured_at: new Date().toISOString(),
+      captured_at: jsonTimestamp(),
     };
     writeJson(SESSION_STATE_PATH, session);
     appendLog(`Waiter captured ${fresh.length} fresh render(s) for aspect ${aspect}: ${fresh.map((item) => item.media_name).join(", ")}.`);

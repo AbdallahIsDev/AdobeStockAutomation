@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { FAILED_DOWNLOADS_DIR, ROOT } from "../project_paths";
+import { dateFolderName, jsonTimestamp } from "./time";
 
 type FailedAssetOptions = {
   assetKey: string;
@@ -23,10 +24,6 @@ function sanitizeAssetKey(value: string): string {
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 120) || "failed_asset";
-}
-
-function dateFolderName(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function windowsRelative(filePath: string): string {
@@ -60,7 +57,7 @@ export function quarantineFailedAsset(options: FailedAssetOptions): FailedAssetR
     markerPath,
     `${JSON.stringify(
       {
-        failed_at: options.timestamp ?? new Date().toISOString(),
+        failed_at: options.timestamp ?? jsonTimestamp(),
         reason_code: options.reasonCode,
         reason_detail: options.reasonDetail ?? null,
         folder_path: windowsRelative(folderPath),

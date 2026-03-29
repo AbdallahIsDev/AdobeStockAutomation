@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import type { Download, Page } from "playwright";
-import { connectBrowser, findPageByUrl, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
 import { AUTOMATION_LOG_PATH, DATA_DIR, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
+import { dateFolderName, jsonTimestamp } from "../common/time";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -20,11 +22,25 @@ type DownloadedImage = {
 };
 
 type SessionState = {
+  current_project_url?: string;
   current_project_id?: string;
+  pipeline_mode?: string;
+  post_download_policy?: string;
   current_step?: string;
   images_downloaded_count?: number;
   downloaded_images?: DownloadedImage[];
   errors?: string[];
+  current_16x9_rendered?: string[];
+  current_1x1_rendered?: string[];
+  last_render_batch?: {
+    prompt_ids?: number[];
+    aspect_ratio?: string;
+    rendered_media?: Array<{
+      media_name?: string;
+      href?: string | null;
+      tile_id?: string | null;
+    }>;
+  };
 };
 
 type BrowserProbe = {
@@ -42,6 +58,14 @@ type GeneratedImage = {
   mediaName: string;
   tileId: string | null;
   href: string | null;
+  top: number;
+  left: number;
+};
+
+type CurrentBatchTarget = {
+  media_name: string;
+  href?: string | null;
+  tile_id?: string | null;
 };
 
 type SavedDownload = {
@@ -55,6 +79,7 @@ type SavedDownload = {
 
 const ROOT = process.cwd();
 const BROWSER_PROBE_PATH = path.join(DATA_DIR, "browser_probe.json");
+const UPSCALE_RUNTIME_PATH = path.join(ROOT, "scripts", "upscale_runtime.ps1");
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
 const CDP_PORT = 9222;
 
@@ -72,13 +97,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  const now = new Date();
-  const stamp = `${now.toISOString().slice(0, 10)}__${now.toTimeString().slice(0, 8)}`;
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${stamp} ${message}\n`, "utf8");
-}
-
-function dateFolderName(): string {
-  return new Date().toISOString().slice(0, 10);
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
 }
 
 function sanitizeFileStem(value: string): string {
@@ -114,14 +133,63 @@ async function getGeneratedImages(page: Page): Promise<GeneratedImage[]> {
       }
       const tile = img.closest("[data-tile-id]");
       const anchor = img.closest("a");
+      const rect = img.getBoundingClientRect();
       return {
         index,
         mediaName,
         tileId: tile?.getAttribute("data-tile-id") || null,
         href: anchor?.getAttribute("href") || null,
+        top: rect.top,
+        left: rect.left,
       };
     }).filter((item) => item.mediaName);
   }, GENERATED_IMAGE_SELECTOR);
+}
+
+function sortNewestFirst(images: GeneratedImage[]): GeneratedImage[] {
+  return [...images].sort((a, b) => {
+    if (a.top !== b.top) {
+      return b.top - a.top;
+    }
+    if (a.left !== b.left) {
+      return b.left - a.left;
+    }
+    return b.index - a.index;
+  });
+}
+
+function getCurrentBatchMediaNames(session: SessionState): Set<string> {
+  const set = new Set<string>();
+  for (const item of session.last_render_batch?.rendered_media ?? []) {
+    if (item?.media_name) {
+      set.add(item.media_name);
+    }
+  }
+  for (const mediaName of session.current_16x9_rendered ?? []) {
+    if (mediaName) {
+      set.add(mediaName);
+    }
+  }
+  for (const mediaName of session.current_1x1_rendered ?? []) {
+    if (mediaName) {
+      set.add(mediaName);
+    }
+  }
+  return set;
+}
+
+function getCurrentBatchTargets(session: SessionState): Map<string, CurrentBatchTarget> {
+  const map = new Map<string, CurrentBatchTarget>();
+  for (const item of session.last_render_batch?.rendered_media ?? []) {
+    if (item?.media_name) {
+      map.set(item.media_name, {
+        media_name: item.media_name,
+        href: item.href ?? null,
+        tile_id: item.tile_id ?? null,
+      });
+    }
+  }
+  return map;
 }
 
 async function openDownloadSubmenu(page: Page, mediaName: string): Promise<boolean> {
@@ -192,6 +260,39 @@ async function captureToastText(page: Page): Promise<string | null> {
   });
 }
 
+async function captureToastTextSafe(page: Page): Promise<string | null> {
+  try {
+    return await captureToastText(page);
+  } catch {
+    return null;
+  }
+}
+
+function shouldQueueFifoPrepare(session: SessionState): boolean {
+  return session.post_download_policy === "fifo_upscale_prepare";
+}
+
+function queueFifoPrepare(savedPath: string): void {
+  spawn(
+    "powershell",
+    [
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      UPSCALE_RUNTIME_PATH,
+      "-Action",
+      "fifo",
+      "-ImagePath",
+      savedPath,
+    ],
+    {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  ).unref();
+}
+
 function markDownloaded(session: SessionState, image: GeneratedImage, saved: SavedDownload, note: string): void {
   const downloaded = Array.isArray(session.downloaded_images) ? session.downloaded_images : [];
   downloaded.push({
@@ -199,7 +300,7 @@ function markDownloaded(session: SessionState, image: GeneratedImage, saved: Sav
     saved_path: saved.savedPath,
     suggested_filename: saved.suggestedFilename,
     download_attempt: saved.attempt,
-    downloaded_at: new Date().toISOString(),
+    downloaded_at: jsonTimestamp(),
     download_mode: saved.mode,
     note,
     href: image.href,
@@ -208,6 +309,10 @@ function markDownloaded(session: SessionState, image: GeneratedImage, saved: Sav
   });
   session.downloaded_images = downloaded;
   session.images_downloaded_count = downloaded.length;
+  if (shouldQueueFifoPrepare(session)) {
+    queueFifoPrepare(saved.savedPath);
+    appendLog(`Queued FIFO prepare for ${image.mediaName} -> ${saved.savedPath}`);
+  }
 }
 
 async function submitPass(
@@ -217,12 +322,28 @@ async function submitPass(
   attempt: number,
 ): Promise<Map<string, SavedDownload>> {
   const expected = images.slice();
+  const expectedByMedia = new Map(expected.map((image) => [image.mediaName, image]));
   const completed = new Map<string, SavedDownload>();
   let eventIndex = 0;
 
   const handler = async (download: Download) => {
-    const current = expected[eventIndex];
-    eventIndex += 1;
+    let current: GeneratedImage | undefined;
+    const downloadUrl = typeof download.url === "function" ? download.url() : "";
+    if (downloadUrl) {
+      try {
+        const parsed = new URL(downloadUrl);
+        const mediaNameFromUrl = parsed.searchParams.get("name") || "";
+        if (mediaNameFromUrl) {
+          current = expectedByMedia.get(mediaNameFromUrl);
+        }
+      } catch {
+        current = undefined;
+      }
+    }
+    if (!current) {
+      current = expected[eventIndex];
+      eventIndex += 1;
+    }
     if (!current) {
       return;
     }
@@ -274,7 +395,7 @@ async function submitPass(
     }
 
     for (const saved of completed.values()) {
-      saved.toastText = await captureToastText(page);
+      saved.toastText = await captureToastTextSafe(page);
     }
   } finally {
     page.off("download", handler);
@@ -296,18 +417,42 @@ async function main(): Promise<void> {
   });
 
   const browser = await connectBrowser(CDP_PORT);
-  const page = findPageByUrl(browser, session.current_project_id ? `/fx/tools/flow/project/${session.current_project_id}` : "/fx/tools/flow/project/");
-  if (!page) {
-    throw new Error("Flow project page not found.");
-  }
+  const urlPattern = session.current_project_id ? `/fx/tools/flow/project/${session.current_project_id}` : "/fx/tools/flow";
+  const openUrl = session.current_project_url || "https://labs.google/fx/tools/flow";
+  const page = await getOrOpenPage(browser, urlPattern, openUrl);
   await page.bringToFront();
 
-  const allImages = await getGeneratedImages(page);
+  const allImages = sortNewestFirst(await getGeneratedImages(page));
   const downloadedSet = new Set((session.downloaded_images ?? []).map((item) => item.media_name));
-  let pending = allImages.filter((image) => !downloadedSet.has(image.mediaName));
+  const currentBatchMediaNames = getCurrentBatchMediaNames(session);
+  const currentBatchTargets = getCurrentBatchTargets(session);
+  let pending = allImages.filter((image) =>
+    currentBatchMediaNames.has(image.mediaName)
+      && !downloadedSet.has(image.mediaName)
+      && (() => {
+        const target = currentBatchTargets.get(image.mediaName);
+        if (!target) {
+          return true;
+        }
+        if (target.tile_id && image.tileId && target.tile_id !== image.tileId) {
+          return false;
+        }
+        if (target.href && image.href && target.href !== image.href) {
+          return false;
+        }
+        return true;
+      })(),
+  );
+  if (!pending.length && currentBatchMediaNames.size === 0) {
+    pending = allImages.filter((image) => !downloadedSet.has(image.mediaName));
+  }
   if (!pending.length) {
     appendLog(`No new Flow images needed non-blocking download on project ${session.current_project_id ?? "unknown"}.`);
     return;
+  }
+
+  for (const image of pending) {
+    appendLog(`Preflight exact download target media=${image.mediaName} tile=${image.tileId ?? "null"} href=${image.href ?? "null"} gridTop=${image.top} gridLeft=${image.left}`);
   }
 
   const pass1 = await submitPass(page, pending, "2K", 1);
@@ -347,7 +492,7 @@ async function main(): Promise<void> {
         mode: saved.mode,
         attempts: saved.attempt,
         saved_path: saved.savedPath,
-        checked_at: new Date().toISOString(),
+        checked_at: jsonTimestamp(),
       },
     ];
   }
@@ -356,7 +501,7 @@ async function main(): Promise<void> {
   writeJson(SESSION_STATE_PATH, session);
 
   browserProbe.cdp_port = CDP_PORT;
-  browserProbe.checked_at = new Date().toISOString();
+  browserProbe.checked_at = jsonTimestamp();
   browserProbe.status = finalMissing.length ? "downloads_partial_failure" : "downloads_completed";
   browserProbe.page_url = page.url();
   browserProbe.project_id = session.current_project_id ?? null;

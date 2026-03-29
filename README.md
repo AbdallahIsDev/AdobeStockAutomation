@@ -6,7 +6,7 @@ This project is a four-stage Adobe Stock production pipeline built around trend 
 
 1. Researches commercially promising stock trends and ranks them for execution.
 2. Generates and downloads image series from Google Flow with sidecar metadata for every successful image.
-3. Normalizes, registers, and upscales downloaded images to a 4K-ready output set, either in FIFO mode during full-system runs or in batch mode during standalone upscale runs.
+3. Normalizes, registers, and upscales downloaded images to a 4K-ready output set, with FIFO post-download prepare as the default and batch mode available for standalone upscale runs.
 4. Applies the prepared metadata to Adobe Stock upload items so the final review can be done quickly.
 
 ## Main Workflow
@@ -156,8 +156,8 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 - Manual images must receive complete metadata during File 03 before they are allowed to upscale.
 - File 02 treats policy violations as prompt rewrites, not account-limit failures.
 - File 02 downloads completed renders opportunistically and does not wait for a full batch to finish before continuing submission.
-- Full-system runs use FIFO post-download prepare: download -> sidecar -> upscale -> ready for metadata apply.
-- Stage-only image-creation runs stay in download-only mode and do not auto-trigger FIFO upscale.
+- File 02 uses FIFO post-download prepare by default: download -> sidecar -> queue upscale -> continue immediately.
+- Batch upscale remains available as a standalone recovery/cleanup path when explicitly invoked.
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.
 - File 03 must reconcile manual images dropped into `downloads/manual/`, generate their full metadata, and only then upscale them.
 - Failed-asset `.failure.json` files are auto-created by the Flow and Upscale runtime commands; they are not written manually in the markdown instructions.

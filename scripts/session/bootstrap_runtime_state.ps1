@@ -98,9 +98,9 @@ function Ensure-JsonFile {
 }
 
 $now = Get-Date
-$nowIso = $now.ToString("yyyy-MM-ddTHH:mm:ssK")
+$nowJson = $now.ToString("yyyy-MM-dd__HH:mm:ss")
 $today = $now.ToString("yyyy-MM-dd")
-$validUntilIso = $now.AddHours(4).ToString("yyyy-MM-ddTHH:mm:ssK")
+$validUntilJson = $now.AddHours(4).ToString("yyyy-MM-dd__HH:mm:ss")
 
 New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
 
@@ -111,9 +111,9 @@ $seriesStructure = [ordered]@{
 
 Ensure-JsonFile -Path (Join-Path $dataDir "session_state.json") -Defaults ([ordered]@{
   session_date = $today
-  session_started_at = $nowIso
+  session_started_at = $nowJson
   pipeline_mode = "stage_only"
-  post_download_policy = "download_only"
+  post_download_policy = "fifo_upscale_prepare"
   current_stage = $null
   last_completed_stage = $null
   current_account_index = 0
@@ -170,7 +170,7 @@ Ensure-JsonFile -Path (Join-Path $dataDir "static_knowledge_cache.json") -Defaul
 
 Ensure-JsonFile -Path (Join-Path $dataDir "dynamic_trend_cache.json") -Defaults ([ordered]@{
   cached_at = $null
-  valid_until = $validUntilIso
+  valid_until = $validUntilJson
   ttl_hours = 4
   queries_run = 0
   sources_queried = @()
