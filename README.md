@@ -18,9 +18,9 @@ This project is a four-stage Adobe Stock production pipeline built around trend 
 - `instructions/02_IMAGE_CREATION.md`
   Builds the 8-slot prompt series, drives Google Flow, downloads renders, and writes `.metadata.json` sidecars.
 - `instructions/03_IMAGE_UPSCALER.md`
-  Scans all downloaded images, repairs missing sidecars, updates `image_registry.json`, and upscales images with Upscayl.
+  Scans all downloaded images, generates full metadata for manual images during the scan phase, updates `image_registry.json`, and upscales images with Upscayl.
 - `instructions/04_METADATA_OPTIMIZER.md`
-  Loads sidecar metadata and applies it to Adobe Stock upload rows.
+  Loads sidecar metadata and applies it to Adobe Stock upload rows, with a fallback rebuild path only for outside-system uploads.
 - `instructions/STOCK_SUCCESS_REPORT.md`
   Strategic commercial reference used by the execution files through targeted chapter reads.
 
@@ -44,6 +44,8 @@ PROJECT_ROOT\
 │   ├── upscale_runtime.ps1             ← Public upscale entrypoint
 │   ├── process_adobe_page.ps1
 │   ├── project_paths.ts
+│   ├── common\                         ← Shared runtime helpers
+│   │   └── failed_assets.ts
 │   ├── flow\                           ← Internal Flow workers
 │   │   ├── flow_batch_submit_worker.ts
 │   │   ├── flow_download_worker.ts
@@ -61,6 +63,7 @@ PROJECT_ROOT\
 │
 ├── downloads\                          ← Source images and final prepared outputs
 │   ├── [YYYY-MM-DD]\                   ← AI-generated images + `.metadata.json` sidecars
+│   ├── failed\                         ← Failed assets grouped by date and asset name
 │   ├── manual\                         ← Manually added source images
 │   └── upscaled\                       ← Final prepared output set
 │
@@ -99,6 +102,8 @@ PROJECT_ROOT\
   The four execution playbooks and the stock success report.
 - `scripts/`
   Runnable automation workers, the single public Flow entrypoint, shared path helpers, Adobe Stock helper scripts, the runtime JSON bootstrap script, and command wrappers for session mode and FIFO/batch upscale.
+- `scripts/common/`
+  Shared helpers used across multiple stages, including failed-asset quarantine.
 - `scripts/session_runtime.ps1`
   Unified public entrypoint for bootstrap, full-system session setup, and stage-only session setup.
 - `scripts/upscale_runtime.ps1`
@@ -112,7 +117,7 @@ PROJECT_ROOT\
 - `data/`
   Runtime JSON state, registries, selector caches, and session handoff files.
 - `downloads/`
-  Source images, manual imports, and final upscaled exports.
+  Source images, manual imports, failed-asset quarantine, and final upscaled exports.
 - `staging/`
   Temporary upscale buckets used by the cleaned 02 pipeline.
 - `logs/`
@@ -148,12 +153,13 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 ## Operational Rules
 
 - Every downloaded image must have exactly one matching `.metadata.json` sidecar.
+- Manual images must receive complete metadata during File 03 before they are allowed to upscale.
 - File 02 treats policy violations as prompt rewrites, not account-limit failures.
 - File 02 downloads completed renders opportunistically and does not wait for a full batch to finish before continuing submission.
 - Full-system runs use FIFO post-download prepare: download -> sidecar -> upscale -> ready for metadata apply.
 - Stage-only image-creation runs stay in download-only mode and do not auto-trigger FIFO upscale.
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.
-- File 03 must reconcile manual images dropped into `downloads/manual/` before upscaling.
+- File 03 must reconcile manual images dropped into `downloads/manual/`, generate their full metadata, and only then upscale them.
 
 ## Current Layout
 

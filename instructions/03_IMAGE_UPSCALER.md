@@ -5,7 +5,7 @@
 
 ## PURPOSE
 
-Normalize every image in `downloads\`, keep the registry accurate, create missing manual-image sidecars, and upscale everything possible to a 4K-ready output set.
+Normalize every image in `downloads\`, keep the registry accurate, generate full metadata for manual images during the scan phase, and upscale everything possible to a 4K-ready output set.
 
 This file supports two execution modes:
 
@@ -46,6 +46,26 @@ FIFO one-image run:   powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scri
 
 ---
 
+## SUB-AGENT SYSTEM
+
+This file is complex enough to benefit from a light sub-agent split.
+
+- **Sub-Agent A — Registry + Naming**
+  Scans `downloads\`, normalizes manual filenames, and updates `image_registry.json`.
+- **Sub-Agent B — Manual Metadata Generator**
+  Performs visual analysis and writes complete sidecars for manual images during File 03.
+- **Sub-Agent C — Upscale Runner**
+  Handles staging, CLI/GUI upscale execution, output verification, and final registry updates.
+- **Sub-Agent D — Failure Quarantine**
+  Moves failed assets and their related files into `downloads\failed\[YYYY-MM-DD]\[asset_name]\` and writes the failure marker JSON.
+
+Rules:
+
+- Sub-Agent B must finish before any manual image can enter upscale.
+- Sub-Agent D owns any asset with failed analysis, failed upscale, or missing upscale output.
+
+---
+
 ## INPUT TYPES
 
 ### AI-generated images
@@ -59,8 +79,8 @@ FIFO one-image run:   powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scri
 
 - arrive with arbitrary names in `downloads\manual\`
 - have no sidecar
-- must be renamed, registered, and given a bootstrap sidecar before upscaling
-- `04_METADATA_OPTIMIZER.md` later generates the full metadata automatically from visual analysis; the user does not fill manual metadata by hand
+- must be renamed, registered, and given a **complete metadata sidecar via visual analysis** before upscaling
+- after File 03 runs, manual images have `status: ready_for_upload` — File 04 treats them the same as AI images
 
 ---
 
@@ -86,8 +106,15 @@ Before any upscale work:
 2. scan `downloads\` recursively; exclude `downloads\upscaled\`, `staging\`, and non-image files
 3. for each image not in registry: register it and ensure exactly one `.metadata.json` sidecar exists
 4. if AI image sidecar is missing: create a minimal bootstrap sidecar (mark `source: ai_generated`) and log a warning
-5. log orphan sidecars (sidecars with no matching image) for manual review
-6. do not proceed to upscaling until every image has exactly one sidecar
+5. if a manual image has no sidecar: generate the full sidecar now during File 03 before upscale
+6. log orphan sidecars (sidecars with no matching image) for manual review
+7. do not proceed to upscaling until every image has exactly one sidecar
+
+Failure quarantine rule:
+
+- if an image fails metadata generation, upscale execution, or output verification, move it to `downloads\failed\[YYYY-MM-DD]\[asset_name]\`
+- move the image and any matching `.metadata.json`
+- write a `.failure.json` marker in the same folder with the reason
 
 Registry fields to maintain per entry:
 
@@ -125,26 +152,84 @@ Assign upscale groups by `long_side`:
 
 ---
 
-## MANUAL SIDECAR BOOTSTRAP
+## MANUAL IMAGE METADATA GENERATION
 
-If a manual image has no sidecar, create one immediately so the image can move through the same registry and upscale flow as AI-generated images.
+When a manual image is registered, **generate its complete metadata immediately** from visual analysis. Do not create a stub and defer this to File 04. By the time any image reaches File 04, it must already have a complete sidecar ready to apply — this keeps File 04 as a simple applier for all images without exception.
 
-This bootstrap sidecar is structural only. It is not a user task. `04_METADATA_OPTIMIZER.md` must later generate the real title, keywords, category, and disclosure fields automatically from the image itself, then apply that metadata to the matching Adobe Stock item.
+### When to run
+
+Run for every manual image during the registry scan. Also run for any AI-generated image whose sidecar is missing (same output format, mark `source: ai_generated`).
+
+### How to analyze the image
+
+Load the image file and inspect it visually. Determine:
+
+- **Primary subject**: what is the main visual element?
+- **Setting/environment**: indoor, outdoor, studio, urban, nature?
+- **Mood/emotion**: confident, calm, focused, joyful, dramatic?
+- **Demographics**: age range, gender, ethnicity if visible?
+- **Commercial use cases**: which industry would license this? For what purpose?
+- **Composition style**: portrait, wide scene, close-up, overhead, flat-lay?
+- **Color palette**: dominant colors, warm/cool tone?
+- **Is it AI-generated?** Can you tell from the visual style? Default to `false` for manual images unless obvious AI artifacts are present.
+
+### What to write
+
+Apply the full metadata rules from `STOCK_SUCCESS_REPORT.md`:
+
+**Title** (under 70 chars, buyer-search style, subject + setting + differentiator):
+```
+[Subject] + [Action/State] + [Setting] + [Modifier]
+No "stock photo of", no "AI generated", no filler words
+Example: "Diverse professionals collaborating in modern coworking space"
+```
+
+**Keywords** (25–35, follow the 35-slot blueprint from the success report):
+```
+Slots 1–3:   Most specific buyer-intent phrases (3–4 words)
+Slots 4–7:   Long-tail conceptual phrases
+Slots 8–12:  Descriptive: setting, action, mood, style
+Slots 13–20: Conceptual: industry, emotion, abstract meaning
+Slots 21–28: Technical: composition, color, demographics
+Slots 29–35: Industry and use-case tags
+```
+
+**Category**: choose the single most specific applicable category from the Adobe Stock list (same list used in File 04).
+
+**File type**: `Photos` for photorealistic; `Illustrations` for clearly drawn/digital art.
+
+**AI disclosure**: `false` for manual images unless the image is visually clearly AI-generated.
+
+**People/property fictional**: `false` for manual images unless clearly synthetic.
+
+### Output sidecar
+
+Write the complete sidecar alongside the image file before proceeding to upscaling:
 
 ```json
 {
-  "source_image": "downloads\\manual\\manual_example_M001_20260328.png",
-  "status": "pending_auto_metadata_generation",
+  "source_image": "downloads\\manual\\manual_sunset_beach_M001_20260328.jpg",
+  "source": "manual",
+  "status": "ready_for_upload",
+  "generated_by": "visual_analysis",
   "adobe_stock_metadata": {
-    "title": "",
-    "keywords": [],
-    "category": "",
+    "title": "Scenic Sunset Over Beach With Golden Reflections",
+    "title_char_count": 49,
+    "keywords": ["sunset beach", "golden hour ocean", "coastal landscape sunset", "..."],
+    "keyword_count": 28,
+    "category": "Landscapes",
     "file_type": "Photos",
     "ai_generated": false,
     "people_or_property_fictional": false
   }
 }
 ```
+
+### After generating metadata
+
+The image sidecar status is `ready_for_upload`. File 04 treats it identically to an AI-generated image — no separate analysis path needed.
+
+If visual analysis fails (corrupt file, unreadable image): write an error sidecar with `status: analysis_failed`, log the error, move the asset to `downloads\failed\[YYYY-MM-DD]\[asset_name]\`, and skip that image from upscale. Do not block the rest of the pipeline.
 
 ---
 
@@ -242,8 +327,8 @@ Handoff: `Next execution file: 04_METADATA_OPTIMIZER.md`
 This file is complete when:
 
 - every input image is registered with correct dimensions and scale assignment
-- every image has exactly one sidecar
+- every image has exactly one sidecar with `status: ready_for_upload`
+- manual images have full metadata generated from visual analysis (not stubs)
 - all images are in `downloads\upscaled\` with matching sidecars
 - registry entries point to final output paths
 - staging folders are cleaned
-- manual-image bootstrap sidecars exist where required

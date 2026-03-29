@@ -5,6 +5,7 @@ export const INSTRUCTIONS_DIR = path.join(ROOT, "instructions");
 export const SCRIPTS_DIR = path.join(ROOT, "scripts");
 export const DATA_DIR = path.join(ROOT, "data");
 export const DOWNLOADS_DIR = path.join(ROOT, "downloads");
+export const FAILED_DOWNLOADS_DIR = path.join(DOWNLOADS_DIR, "failed");
 export const STAGING_DIR = path.join(ROOT, "staging");
 export const LOGS_DIR = path.join(ROOT, "logs");
 export const SCREENSHOTS_DIR = path.join(LOGS_DIR, "screenshots");

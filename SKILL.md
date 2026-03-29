@@ -32,6 +32,8 @@ Rules:
 - do not execute from memory alone; always open the relevant execution file(s)
 - `instructions\STOCK_SUCCESS_REPORT.md` is the strategy reference
 - `instructions\01_TREND_RESEARCH.md` and `instructions\02_IMAGE_CREATION.md` are separate on purpose
+- `instructions\03_IMAGE_UPSCALER.md` must generate full metadata for manual images before upscale
+- `instructions\04_METADATA_OPTIMIZER.md` should apply sidecars for all pipeline images and only use visual rebuild for outside-system Adobe uploads
 - if sub-agents are available, follow the sub-agent split defined inside `instructions\01_TREND_RESEARCH.md`
 
 Primary execution chain:

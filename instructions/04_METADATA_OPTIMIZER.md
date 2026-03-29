@@ -62,19 +62,27 @@ Recognizable people No:        input[data-t="has-release-no"]
 
 ---
 
+## SUB-AGENT SYSTEM
+
+Keep this file mostly single-controller because Adobe page state is fragile and should not be clicked by multiple agents at once.
+
+- **Controller Agent**
+  Owns thumbnail selection, sidecar lookup, field application, save confirmation, and pagination.
+- **Optional Helper Agent — Outside-System Draft**
+  Used only for outside-system uploads. It may draft metadata from the selected image, but the Controller Agent must still create the sidecar, update registry state, and apply the fields.
+
+Rule:
+
+- do not split live Adobe interactions across multiple agents
+- only use the helper for outside-system fallback when it improves speed or metadata quality
+
+---
+
 ## IMAGE TYPES
 
-### Type A — automated images
+**All images that went through the automation pipeline** — both AI-generated and manual — arrive in File 04 with a complete sidecar (`status: ready_for_upload`). File 03 generates full metadata for manual images during its scan phase. File 04 is a pure applier for these images.
 
-- created by `02_IMAGE_CREATION.md`, upscaled by `03_IMAGE_UPSCALER.md`
-- already have a complete sidecar (`status: ready_for_upload`)
-- require a quick 5-second visual sanity check, then direct field application
-
-### Type B — manual images
-
-- bootstrapped by `03_IMAGE_UPSCALER.md` (`status: pending_auto_metadata_generation`)
-- or not in registry at all (uploaded outside the automation system)
-- require full visual analysis and automatic metadata generation before applying
+**Exception: images uploaded outside the automation system** (uploaded directly to Adobe Stock without going through this pipeline) have no registry entry, no sidecar, or both. These are handled as a fallback case only.
 
 ---
 
@@ -91,9 +99,9 @@ Adobe Stock shows at the bottom of the right panel: `File ID(s): XXXXXXX - Origi
 
 Status interpretation:
 
-- `ready_for_upload` → Type A
-- `pending_auto_metadata_generation` → Type B
-- missing registry or sidecar → treat as Type B and rebuild from visual inspection
+- `ready_for_upload` → sidecar is complete — apply directly after sanity check
+- `analysis_failed` → visual analysis failed during File 03 — flag for manual review, skip
+- missing registry entry or missing sidecar → uploaded outside the pipeline — see Fallback Workflow below
 
 ---
 
@@ -117,30 +125,35 @@ stop when no Next page is found
 
 Click the thumbnail. Wait for right panel to update. Read `Original name(s)` from the file info block at the bottom of the panel.
 
-### Step 2 — Determine type
+### Step 2 — Determine path
 
-Load registry entry → load sidecar → read `status` → branch to Type A or Type B.
+Load registry entry → load sidecar → read `status`.
 
-### Step 3A — Type A workflow
+- if registry + sidecar exist and `status: ready_for_upload` -> use pipeline apply workflow
+- if sidecar says `analysis_failed` -> skip and flag for manual review
+- if registry or sidecar is missing -> use outside-system fallback workflow
+
+### Step 3A — Pipeline apply workflow
 
 1. Load all metadata from sidecar
 2. Visual sanity check (5 seconds): does the image roughly match the `series_slot` description? If obvious mismatch, rewrite only the mismatched fields and flag the image.
 3. Apply all fields (see Field Rules below)
 4. Click Save
 
-### Step 3B — Type B workflow
+### Step 3B — Outside-system fallback workflow
 
 1. Visually inspect the image fully
-2. Generate the complete metadata from the image itself. The user does not supply manual metadata for this path.
-3. Evaluate generated fields against success report standards:
+2. Generate the complete metadata from the image itself using the success report rules.
+3. Create a new sidecar and registry entry so this image is brought back into the automation system.
+4. Evaluate generated fields against success report standards:
 - **Title**: pass if under 70 chars, has subject + context + differentiator, reads naturally. Fail if empty, generic, keyword-stuffed, or over 70 chars.
 - **Keywords**: pass if 20–35 present and first 7–10 are specific buyer-intent phrases. Fail if fewer than 20, or first slots have single generic words.
 - **Category**: pass if most specific applicable category is selected. Fail if wrong or generic.
 - **AI checkbox**: pass if correctly matches actual image source. Fail if AI image has box unchecked.
-4. If all fields pass → keep the generated metadata and continue
-5. If any field fails → rewrite only the failing fields using success report standards
-6. Save the completed metadata back to the sidecar before applying
-7. Apply all fields
+5. If all fields pass → keep the generated metadata and continue
+6. If any field fails → rewrite only the failing fields using success report standards
+7. Save the completed metadata back to the sidecar before applying
+8. Apply all fields
 
 ---
 
@@ -155,7 +168,7 @@ Verify the language selector shows "English". Adobe Stock pre-selects English by
 - `Photos` for photorealistic work (including AI-generated photorealistic)
 - `Illustrations` for clearly illustrated or drawn style
 
-### AI disclosure (Type A always; Type B based on actual image)
+### AI disclosure
 
 The two checkboxes have a parent-child relationship. Always apply in order:
 
@@ -201,13 +214,13 @@ Science | Social Issues | Sports | Technology | Transport | Travel
 1. Click "Save work" button (bottom-left of the page, fixed position)
 2. Wait for save confirmation (button state change or toast)
 3. Do not proceed until save is confirmed
-4. Update sidecar `applied_to_adobe_stock: true` for Type A images
+4. Update sidecar `applied_to_adobe_stock: true`
 5. Log result
 
 Write session summary to log:
 
 ```text
-[N] prepared | [N] automated (Type A) | [N] manual updated (Type B) | [N] manual skipped | [N] failed
+[N] applied from sidecar | [N] rebuilt outside-system uploads | [N] skipped | [N] failed
 ```
 
 ---
@@ -217,7 +230,7 @@ Write session summary to log:
 | Error | Recovery |
 |---|---|
 | Right panel not loading after 3s | Re-click thumbnail → retry |
-| Sidecar not found | Treat as Type B → visual rebuild |
+| Sidecar not found | Treat as outside-system upload -> visual rebuild + create sidecar |
 | Title over 200 chars | Truncate to 70 at last word boundary |
 | Keywords over 49 | Remove from end until ≤ 49 |
 | Save not confirming after 3s | Retry click once more; if still fails, log + skip |
@@ -234,7 +247,7 @@ Retry policy: max 3 attempts per action, backoff 2s → 4s → 8s. Flag and skip
 This file is complete when:
 
 - every upload item on every page has been processed
-- Type A images had sidecars applied correctly
-- Type B images received auto-generated complete metadata before apply
+- pipeline images had sidecars applied correctly
+- outside-system uploads were rebuilt into the system before apply
 - all changes were saved
 - the queue is ready for manual human review and submit

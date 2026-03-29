@@ -8,6 +8,7 @@ import {
   screenshotElement,
   waitForElement,
 } from "../../../../../browser-automation-core/browser_core";
+import { quarantineFailedAsset } from "../common/failed_assets";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -68,6 +69,7 @@ type DownloadAttemptResult =
       attempt: number;
       reason: string;
       bodySnippet: string;
+      savedPath?: string | null;
     };
 
 const ROOT = process.cwd();
@@ -118,6 +120,23 @@ function buildTargetPath(suggestedFilename: string, mediaName: string, mode: "2K
   const dir = path.join(DOWNLOADS_DIR, dateFolderName());
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, `${stem}__${mode}__${mediaName}${ext}`);
+}
+
+function writeFailureRecord(mediaName: string, reason: string, bodySnippet: string, mode: string, savedPath?: string | null): void {
+  quarantineFailedAsset({
+    assetKey: mediaName,
+    reason,
+    relatedPaths: [savedPath],
+    timestamp: timestampIso(),
+    extra: {
+      media_name: mediaName,
+      mode,
+      body_snippet: bodySnippet,
+      source_stage: "02_IMAGE_CREATION",
+      source_worker: "flow_download_worker",
+      failed_image_path: savedPath ? path.basename(savedPath) : null,
+    },
+  });
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -352,6 +371,7 @@ async function performDownloadAttempt(
       attempt,
       reason: failure,
       bodySnippet: await captureBodySnippet(page),
+      savedPath,
     };
   }
 
@@ -501,6 +521,7 @@ async function main(): Promise<void> {
     ].filter(Boolean).join(" | ");
 
     appendLog(`${timestampIso()} Download failed for ${image.mediaName}. ${failureReason}`);
+    writeFailureRecord(image.mediaName, failureReason, fallbackResult.bodySnippet, "download", fallbackResult.savedPath);
     session.errors = [...(session.errors ?? []), `Download failed for ${image.mediaName}: ${failureReason}`];
     results.push({
       media_name: image.mediaName,

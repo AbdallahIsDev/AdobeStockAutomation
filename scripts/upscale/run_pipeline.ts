@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { quarantineFailedAsset } from "../common/failed_assets";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -241,11 +242,20 @@ function createSidecar(sidecarPath: string, imageFile: string, source: "ai_gener
       commercial_use_cases: [],
       visual_keywords_from_trend: [],
     },
-    metadata_generation_mode: source === "manual" ? "auto_from_visual_analysis_in_file_04" : "verify_existing_metadata",
-    status: source === "manual" ? "pending_auto_metadata_generation" : "stub_created_pending_review",
+    metadata_generation_mode: source === "manual" ? "auto_from_visual_analysis_in_file_03" : "verify_existing_metadata",
+    status: source === "manual" ? "analysis_required_before_upscale" : "stub_created_pending_review",
     applied_to_adobe_stock: false,
   };
   writeJson(sidecarPath, sidecar);
+}
+
+function readSidecarStatus(sidecarPath: string): string | null {
+  try {
+    const sidecar = JSON.parse(fs.readFileSync(sidecarPath, "utf8")) as { status?: unknown };
+    return typeof sidecar.status === "string" ? sidecar.status : null;
+  } catch {
+    return null;
+  }
 }
 
 function classifySource(filePath: string): "ai_generated" | "manual" {
@@ -284,6 +294,21 @@ function copyWithSidecar(sourceImage: string, sourceSidecar: string | null, dest
     fs.copyFileSync(sourceSidecar, destSidecar);
   }
   return { imagePath: destImage, sidecarPath: destSidecar };
+}
+
+function quarantineImage(sourceImage: string, sourceSidecar: string | null, reason: string): void {
+  const result = quarantineFailedAsset({
+    assetKey: path.parse(path.basename(sourceImage)).name,
+    reason,
+    relatedPaths: [sourceImage, sourceSidecar],
+    extra: {
+      source_stage: "03_IMAGE_UPSCALER",
+    },
+  });
+
+  appendLog(
+    `Moved failed asset to ${windowsRelative(result.folderPath)} | reason=${reason}`,
+  );
 }
 
 function main(): void {
@@ -416,6 +441,21 @@ function main(): void {
     if (entry.upscaled) {
       continue;
     }
+    if (entry.source === "manual") {
+      const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
+      const status = readSidecarStatus(sourceSidecar);
+      if (status !== "ready_for_upload") {
+        const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+        quarantineImage(
+          sourceImage,
+          sourceSidecar,
+          `manual_metadata_incomplete:${status ?? "missing"}`,
+        );
+        entry.adobe_stock_status = "failed_moved_to_downloads_failed";
+        entry.quality_flag = "failed_before_upscale";
+        continue;
+      }
+    }
     if (fifoTargetNames && !fifoTargetNames.has(entry.final_name)) {
       continue;
     }
@@ -488,6 +528,14 @@ function main(): void {
     if (result.status !== 0) {
       appendLog(`Upscayl batch ${bucket} exited with code ${result.status ?? -1}.`);
       appendUpscalerLog(`Upscayl batch ${bucket} exited with code ${result.status ?? -1}.`);
+      for (const finalName of finalNames) {
+        const entry = registry.images[finalName];
+        const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+        const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
+        quarantineImage(sourceImage, sourceSidecar, `upscale_cli_failed:${bucket}:exit_${result.status ?? -1}`);
+        entry.adobe_stock_status = "failed_moved_to_downloads_failed";
+        entry.quality_flag = "upscale_failed";
+      }
       continue;
     }
 
@@ -497,6 +545,10 @@ function main(): void {
       const outputImage = path.join(OUTPUT_DIR, `${path.parse(finalName).name}.png`);
       if (!fs.existsSync(outputImage)) {
         appendLog(`Upscaled output missing for ${finalName} in batch ${bucket}.`);
+        const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+        quarantineImage(sourceImage, sourceSidecar, `upscale_output_missing:${bucket}`);
+        entry.adobe_stock_status = "failed_moved_to_downloads_failed";
+        entry.quality_flag = "upscale_failed";
         continue;
       }
       if (fs.existsSync(sourceSidecar)) {
