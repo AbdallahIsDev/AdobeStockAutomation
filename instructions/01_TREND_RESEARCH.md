@@ -106,6 +106,28 @@ Coordinator rules:
 - orchestrator merges sub-agent output into `session_state.json`, `dynamic_trend_cache.json`, and `trend_data.json`
 - if sub-agents are unavailable, execute the same order sequentially in one run
 
+## MANDATORY PLANNER / GENERATOR / EVALUATOR LOOP
+
+This file must not run as a single blind worker pass.
+
+Use this quality loop automatically:
+
+- **Planner**
+  reads this file fully, extracts the ordered research steps, cache rules, query batches, scoring logic, and output contract
+- **Generator**
+  executes the research flow and produces `dynamic_trend_cache.json` plus `trend_data.json`
+- **Evaluator**
+  checks that:
+  - static vs dynamic cache rules were respected
+  - stale cache was refreshed only when required
+  - dynamic research covered the intended source mix
+  - weak or non-visual trends were rejected
+  - `trend_data.json` is populated, ranked, and commercially usable
+
+If the Evaluator finds weak trend quality, skipped sub-agent behavior, or missing output fields, the Generator must revise before this stage is allowed to pass.
+
+If true sub-agents are unavailable, preserve the same Planner -> Generator -> Evaluator sequence inside one controller session.
+
 ---
 
 ## RESEARCH MODEL

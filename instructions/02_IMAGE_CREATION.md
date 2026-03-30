@@ -163,6 +163,27 @@ Do not skip the sub-agent system.
 
 If true parallel sub-agents are unavailable, preserve the same four roles sequentially. Do not collapse them into one vague stage.
 
+## MANDATORY PLANNER / GENERATOR / EVALUATOR LOOP
+
+This file must always run under a Planner -> Generator -> Evaluator loop.
+
+- **Planner**
+  reads this file fully and extracts the prompt-series rules, Flow browser rules, rolling download behavior, FIFO handoff behavior, account switching rules, and sidecar contract
+- **Generator**
+  executes the actual Flow creation, rolling download, rename/move, sidecar creation, and FIFO background prepare actions
+- **Evaluator**
+  checks that:
+  - the sub-agent system was actually used
+  - prompts follow the slot structure and are commercially distinct
+  - the downloader ignored old project renders
+  - download order and nonblocking behavior were respected
+  - every downloaded image has the correct `.metadata.json` sidecar
+  - session state and logs reflect the current batch accurately
+
+If the Evaluator finds skipped sub-agents, weak prompts, duplicate downloads, missing sidecars, stale-batch drift, or blocking behavior that should have been nonblocking, the Generator must correct the stage before it passes.
+
+If parallel agents are unavailable, preserve the same Planner -> Generator -> Evaluator sequence inside one controlling run.
+
 ---
 
 ## CREATION LOOP

@@ -64,6 +64,27 @@ Rules:
 - Sub-Agent B must finish before any manual image can enter upscale.
 - Sub-Agent D owns any asset with failed analysis, failed upscale, or missing upscale output.
 
+## MANDATORY PLANNER / GENERATOR / EVALUATOR LOOP
+
+This file must run under Planner -> Generator -> Evaluator by default.
+
+- **Planner**
+  reads this file fully and extracts scan rules, naming rules, registry parity requirements, metadata-generation rules for manual images, scale assignment, failure quarantine, and batch/fifo execution rules
+- **Generator**
+  performs the real scan, registration, sidecar generation, upscale execution, registry updates, and failure quarantine actions
+- **Evaluator**
+  checks that:
+  - every valid image has exactly one sidecar
+  - manual images received full metadata before upscale
+  - the correct scale bucket was chosen
+  - upscaled output and sidecar parity are intact
+  - failures were quarantined correctly with the related files
+  - `image_registry.json` reflects the true final state
+
+If the Evaluator finds a parity issue, bad registry state, missing sidecar, skipped manual metadata generation, wrong scale assignment, or incorrect failure handling, the Generator must revise before the stage can pass.
+
+If true parallel agents are unavailable, preserve the same Planner -> Generator -> Evaluator sequence in one controller session.
+
 ---
 
 ## INPUT TYPES

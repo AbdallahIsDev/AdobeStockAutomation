@@ -78,6 +78,24 @@ Rule:
 - do not split live Adobe interactions across multiple agents
 - only use the helper for outside-system fallback when it improves speed or metadata quality
 
+## MANDATORY PLANNER / GENERATOR / EVALUATOR LOOP
+
+This file must also use Planner -> Generator -> Evaluator, but with one controller owning the live Adobe page.
+
+- **Planner**
+  reads this file fully and extracts browser setup, sidecar lookup, pipeline apply rules, outside-system fallback rules, field constraints, save behavior, and error handling
+- **Generator**
+  performs the real Adobe interactions: thumbnail selection, sidecar lookup, field application, save confirmation, pagination, and fallback rebuilds when needed
+- **Evaluator**
+  checks that:
+  - sidecars were applied exactly where available
+  - outside-system uploads were rebuilt only when truly necessary
+  - titles, keywords, categories, and AI disclosure comply with the success report
+  - save confirmation occurred before the item was considered complete
+  - page state remained stable and no item was silently skipped
+
+Because live Adobe UI state is fragile, the Evaluator should critique and send corrections back to the same controller rather than clicking independently unless the optional helper is explicitly used for outside-system draft generation.
+
 ---
 
 ## IMAGE TYPES
