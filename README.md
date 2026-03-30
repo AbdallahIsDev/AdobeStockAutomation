@@ -51,6 +51,7 @@ PROJECT_ROOT\
 │   │   ├── flow_download_worker.ts
 │   │   ├── flow_nonblocking_download_worker.ts
 │   │   ├── flow_probe.ts
+│   │   ├── flow_recover_failures.ts
 │   │   └── flow_wait_for_new_renders.ts
 │   ├── session\                        ← Internal session helpers
 │   │   ├── bootstrap_runtime_state.ps1
@@ -130,7 +131,7 @@ PROJECT_ROOT\
 - `scripts/upscale_runtime.ps1`
   Runs FIFO single-image prepare or the normal batch upscale pass from one command surface.
 - `scripts/flow_runtime.ts`
-  Unified public entrypoint for Flow probe, submit, default parallel download, recovery download, and render-wait actions.
+  Unified public entrypoint for Flow probe, submit, default parallel download, recovery download, visible-failure recovery, and render-wait actions.
 - `data/session_state.json`
   Current workflow checkpoint across stages.
 - `data/image_registry.json`
@@ -160,6 +161,9 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 - File 02 must retry failed prompts instead of leaving successful sibling renders blocked behind incomplete batches.
 - File 02 uses FIFO post-download prepare by default: download -> sidecar -> queue upscale -> continue immediately.
 - `npx --yes tsx scripts/flow_runtime.ts --action=download` is the default fully parallel downloader; `--action=download-recovery` is the slower recovery-only sweep.
+- `npx --yes tsx scripts/flow_runtime.ts --action=recover-failures` is the scripted repair path for visible Flow failed tiles that escaped normal batch-state handling.
+- File 03 batch upscale is a sync/catch-up pass only for images not already marked `upscaled = true`.
+- File 03 writes outputs into `downloads/upscaled/[source_download_date]`, so the upscaled folder matches the image's real source date.
 - Batch upscale remains available as a standalone recovery/cleanup path when explicitly invoked.
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.
 - File 03 must reconcile manual images dropped into `downloads/manual/`, generate their full metadata, and only then upscale them.

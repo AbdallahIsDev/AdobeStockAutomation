@@ -68,7 +68,6 @@ type CliArgs = {
 };
 
 const UPSCALER_LOG_PATH = AUTOMATION_LOG_PATH;
-const OUTPUT_DIR = path.join(DOWNLOADS_DIR, "upscaled", dateFolderName());
 const MANUAL_DIR = path.join(DOWNLOADS_DIR, "manual");
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"]);
@@ -292,14 +291,50 @@ function manualSequenceStart(existingRegistry: RegistryFile): number {
   return Object.values(existingRegistry.images).filter((entry) => entry.source === "manual").length + 1;
 }
 
+function ensureStagingPlaceholders(): void {
+  ensureFolder(STAGING_DIR);
+  const rootKeep = path.join(STAGING_DIR, ".gitkeep");
+  if (!fs.existsSync(rootKeep)) {
+    fs.writeFileSync(rootKeep, "", "utf8");
+  }
+  for (const bucket of ["x2", "x3", "x4", "copy_only"]) {
+    const dir = path.join(STAGING_DIR, bucket);
+    ensureFolder(dir);
+    const keep = path.join(dir, ".gitkeep");
+    if (!fs.existsSync(keep)) {
+      fs.writeFileSync(keep, "", "utf8");
+    }
+  }
+}
+
 function clearStaging(): void {
+  ensureStagingPlaceholders();
   for (const bucket of ["x2", "x3", "x4", "copy_only"]) {
     const dir = path.join(STAGING_DIR, bucket);
     ensureFolder(dir);
     for (const entry of fs.readdirSync(dir)) {
+      if (entry === ".gitkeep") {
+        continue;
+      }
       fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
     }
   }
+}
+
+function sourceDateFolder(entry: RegistryEntry): string {
+  const rel = entry.source_path.replaceAll("/", "\\");
+  const parts = rel.split("\\");
+  if (parts.length >= 3 && parts[0] === "downloads" && DATE_FOLDER_RE.test(parts[1])) {
+    return parts[1];
+  }
+  if (entry.registered_at && /^\d{4}-\d{2}-\d{2}__/.test(entry.registered_at)) {
+    return entry.registered_at.slice(0, 10);
+  }
+  return dateFolderName();
+}
+
+function outputDirForEntry(entry: RegistryEntry): string {
+  return path.join(DOWNLOADS_DIR, "upscaled", sourceDateFolder(entry));
 }
 
 function copyWithSidecar(sourceImage: string, sourceSidecar: string | null, destDir: string, outputName?: string): { imagePath: string; sidecarPath: string | null } {
@@ -338,7 +373,7 @@ function quarantineImage(
 function main(): void {
   const args = parseArgs();
   ensureFolder(LOGS_DIR);
-  ensureFolder(OUTPUT_DIR);
+  ensureStagingPlaceholders();
 
   const existingRegistry = readJson<RegistryFile>(IMAGE_REGISTRY_PATH, {
     last_updated: jsonTimestamp(),
@@ -462,12 +497,15 @@ function main(): void {
     appendLog(`FIFO prepare selected ${candidates[0].final_name}.`);
   }
 
-  const buckets: Record<string, string[]> = {
-    x2: [],
-    x3: [],
-    x4: [],
-    copy_only: [],
-  };
+  const bucketGroups = new Map<string, RegistryEntry[]>();
+
+  function pushBucket(bucket: "x2" | "x3" | "x4" | "copy_only", entry: RegistryEntry): void {
+    const outputDir = outputDirForEntry(entry);
+    const key = `${bucket}|${outputDir}`;
+    const current = bucketGroups.get(key) ?? [];
+    current.push(entry);
+    bucketGroups.set(key, current);
+  }
 
   for (const entry of Object.values(registry.images)) {
     const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
@@ -505,18 +543,23 @@ function main(): void {
       continue;
     }
     if (entry.assigned_scale === "copy_only") {
-      buckets.copy_only.push(entry.final_name);
+      pushBucket("copy_only", entry);
       continue;
     }
     const bucket = entry.assigned_scale === 2 ? "x2" : entry.assigned_scale === 3 ? "x3" : "x4";
-    buckets[bucket].push(entry.final_name);
+    pushBucket(bucket as "x2" | "x3" | "x4", entry);
   }
 
-  for (const finalName of buckets.copy_only) {
-    const entry = registry.images[finalName];
+  for (const [groupKey, entries] of bucketGroups.entries()) {
+    const [bucket, outputDir] = groupKey.split("|", 2);
+    if (bucket !== "copy_only") {
+      continue;
+    }
+    ensureFolder(outputDir);
+    for (const entry of entries) {
     const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
     const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
-    const copied = copyWithSidecar(sourceImage, sourceSidecar, OUTPUT_DIR);
+      const copied = copyWithSidecar(sourceImage, sourceSidecar, outputDir);
     const dims = readDimensions(copied.imagePath);
     entry.upscaled = true;
     entry.upscaled_path = windowsRelative(copied.imagePath);
@@ -524,7 +567,8 @@ function main(): void {
     entry.upscaled_at = jsonTimestamp();
     entry.adobe_stock_status = "ready_for_metadata_apply";
     if (args.mode === "fifo") {
-      appendLog(`FIFO prepare complete for ${finalName}. Output=${entry.upscaled_path}.`);
+        appendLog(`FIFO prepare complete for ${entry.final_name}. Output=${entry.upscaled_path}.`);
+      }
     }
   }
 
@@ -536,22 +580,23 @@ function main(): void {
     return;
   }
 
-  for (const [bucket, finalNames] of Object.entries(buckets)) {
-    if (bucket === "copy_only" || !finalNames.length) {
+  for (const [groupKey, entries] of bucketGroups.entries()) {
+    const [bucket, outputDir] = groupKey.split("|", 2);
+    if (bucket === "copy_only" || !entries.length) {
       continue;
     }
     const scale = bucket === "x2" ? "2" : bucket === "x3" ? "3" : "4";
     const inputDir = path.join(STAGING_DIR, bucket);
-    for (const finalName of finalNames) {
-      const entry = registry.images[finalName];
+    ensureFolder(outputDir);
+    for (const entry of entries) {
       const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
       fs.copyFileSync(sourceImage, path.join(inputDir, path.basename(sourceImage)));
     }
 
-    appendUpscalerLog(`Running CLI for ${bucket} with ${finalNames.length} image(s).`);
+    appendUpscalerLog(`Running CLI for ${bucket} with ${entries.length} image(s) -> ${windowsRelative(outputDir)}.`);
     const result = spawnSync(cli, [
       "-i", inputDir,
-      "-o", OUTPUT_DIR,
+      "-o", outputDir,
       "-s", scale,
       "-m", "..\\models",
       "-n", modelName,
@@ -569,8 +614,7 @@ function main(): void {
     if (result.status !== 0) {
       appendLog(`Upscayl batch ${bucket} exited with code ${result.status ?? -1}.`);
       appendUpscalerLog(`Upscayl batch ${bucket} exited with code ${result.status ?? -1}.`);
-      for (const finalName of finalNames) {
-        const entry = registry.images[finalName];
+      for (const entry of entries) {
         const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
         const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
         quarantineImage(
@@ -585,12 +629,11 @@ function main(): void {
       continue;
     }
 
-    for (const finalName of finalNames) {
-      const entry = registry.images[finalName];
+    for (const entry of entries) {
       const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
-      const outputImage = path.join(OUTPUT_DIR, `${path.parse(finalName).name}.png`);
+      const outputImage = path.join(outputDir, `${path.parse(entry.final_name).name}.png`);
       if (!fs.existsSync(outputImage)) {
-        appendLog(`Upscaled output missing for ${finalName} in batch ${bucket}.`);
+        appendLog(`Upscaled output missing for ${entry.final_name} in batch ${bucket}.`);
         const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
         quarantineImage(sourceImage, sourceSidecar, "upscale_output_missing", bucket);
         entry.adobe_stock_status = "failed_moved_to_downloads_failed";
@@ -598,7 +641,7 @@ function main(): void {
         continue;
       }
       if (fs.existsSync(sourceSidecar)) {
-        const outputSidecar = path.join(OUTPUT_DIR, `${path.parse(outputImage).name}.metadata.json`);
+        const outputSidecar = path.join(outputDir, `${path.parse(outputImage).name}.metadata.json`);
         fs.copyFileSync(sourceSidecar, outputSidecar);
       }
       entry.upscaled = true;
@@ -607,20 +650,27 @@ function main(): void {
       entry.upscaled_at = jsonTimestamp();
       entry.adobe_stock_status = "ready_for_metadata_apply";
       if (args.mode === "fifo") {
-        appendLog(`FIFO prepare complete for ${finalName}. Output=${entry.upscaled_path}.`);
+        appendLog(`FIFO prepare complete for ${entry.final_name}. Output=${entry.upscaled_path}.`);
       }
+    }
+    for (const stagedName of fs.readdirSync(inputDir)) {
+      if (stagedName === ".gitkeep") {
+        continue;
+      }
+      fs.rmSync(path.join(inputDir, stagedName), { recursive: true, force: true });
     }
   }
 
   registry.last_updated = jsonTimestamp();
   registry.total_images = Object.keys(registry.images).length;
   writeJson(IMAGE_REGISTRY_PATH, registry);
+  clearStaging();
   if (args.mode === "fifo") {
-    appendLog(`FIFO prepare run complete. Registry=${registry.total_images}, output=${windowsRelative(OUTPUT_DIR)}.`);
-    appendUpscalerLog(`FIFO prepare run complete. Output=${windowsRelative(OUTPUT_DIR)}.`);
+    appendLog(`FIFO prepare run complete. Registry=${registry.total_images}.`);
+    appendUpscalerLog(`FIFO prepare run complete.`);
   } else {
-    appendLog(`02 pipeline complete. Registry=${registry.total_images}, output=${windowsRelative(OUTPUT_DIR)}.`);
-    appendUpscalerLog(`02 pipeline complete. Output=${windowsRelative(OUTPUT_DIR)}.`);
+    appendLog(`02 pipeline complete. Registry=${registry.total_images}.`);
+    appendUpscalerLog(`02 pipeline complete.`);
   }
 }
 

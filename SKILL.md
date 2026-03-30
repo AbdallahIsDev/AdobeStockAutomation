@@ -216,6 +216,7 @@ For full-system runs, the orchestrator should think in this exact pattern:
    Session command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage image_creation
    Internal workflow: Planner -> Generator -> Evaluator
    Completion check: downloads\[date]\ contains images and each image has a matching .metadata.json sidecar
+   Exception handling: if Flow shows visible failed tiles or a creation exception that the current batch state did not capture cleanly, call `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=recover-failures` before attempting manual UI repair
 
 3. Spawn Image Upscaler Agent
    Assigned file: instructions\03_IMAGE_UPSCALER.md

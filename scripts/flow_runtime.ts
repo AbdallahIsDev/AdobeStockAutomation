@@ -26,9 +26,12 @@ async function main(): Promise<void> {
     case "retry-failed":
       await import("./flow/flow_retry_failed_prompts");
       return;
+    case "recover-failures":
+      await import("./flow/flow_recover_failures");
+      return;
     default:
       throw new Error(
-        "Usage: --action=probe|submit-batch|download|download-nonblocking|download-recovery|wait-renders|retry-failed",
+        "Usage: --action=probe|submit-batch|download|download-nonblocking|download-recovery|wait-renders|retry-failed|recover-failures",
       );
   }
 }

@@ -236,6 +236,7 @@ Rolling downloader:    npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --acti
 Legacy alias:          npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-nonblocking
 Recovery sweep only:   npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-recovery
 Retry failed prompts:  npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=retry-failed
+Recover UI failures:   npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=recover-failures
 ```
 
 Rule:
@@ -247,6 +248,8 @@ Rule:
 - submit the next prompt group without waiting for the previous group to fully render
 - if a targeted verification pass is needed for one group, use `submit-batch ... --wait-for-outcomes`
 - if the runtime records failed prompts for a group, use `retry-failed` immediately instead of leaving the batch incomplete
+- if Flow shows visible failed tiles or exception states that were not already captured into runtime batch state, use `recover-failures` before trying to repair them manually
+- prefer runtime recovery commands over ad hoc UI improvisation whenever the same exception can be scripted
 
 Failure JSON trigger:
 

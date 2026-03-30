@@ -141,6 +141,8 @@ Batch scope rule:
 
 - if `session_state.json` contains `downloaded_images`, treat that list as the only valid AI-generated batch for this run
 - if an image is not in the active session batch, do not upscale it in `batch` mode
+- if a registry entry already has `upscaled = true` and a valid `upscaled_path`, skip it in `batch` mode
+- `batch` mode is a sync/catch-up pass for downloaded images that are still pending upscale; it must never re-upscale assets that were already completed
 
 Failure quarantine rule:
 
