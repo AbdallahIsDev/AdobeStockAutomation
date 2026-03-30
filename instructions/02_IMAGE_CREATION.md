@@ -12,6 +12,7 @@ This file owns:
 - description generation
 - Flow browser automation
 - rolling generation/download/upscale trigger loop
+- active-session multi-batch tracking
 - rate-limit handling
 - account switching
 - metadata sidecar creation
@@ -196,8 +197,9 @@ For each ranked trend:
 2. Keep quantity at `x1`
 3. Wait 1 second between submissions
 4. Do not wait for each render before sending the next slot
-5. In full-system runs, do not block on `--wait-for-outcomes` before moving the pipeline forward
-6. Once the current 4-prompt group is queued, the rolling downloader may start harvesting completed renders while the next group is being prepared
+5. Do not wait for the first 4-image batch to fully render before starting the next 4-image batch
+6. In full-system runs, do not block on `--wait-for-outcomes` before moving the pipeline forward unless you are doing a targeted verification or retry pass
+7. Once the current 4-prompt group is queued, the rolling downloader may start harvesting completed renders while the next group is already being prepared or submitted
 
 ### Phase 2 - Wait and download 16:9
 
@@ -208,14 +210,14 @@ For each ranked trend:
 5. If the same image fails `2K` twice, use `1X` and mark that fallback in sidecar/state
 6. Keep only a 1-second gap between download requests
 7. Ignore every image that existed in the Flow project before this session's current batch
-8. Only download media IDs recorded in `session_state.current_16x9_rendered`, `session_state.current_1x1_rendered`, or `session_state.last_render_batch.rendered_media`
+8. Treat the current run as an active session window: anything visible before the first batch of this run is old and must be ignored; anything rendered after that baseline belongs to this run and is eligible for download
 9. Download order must be bottom-to-top, then right-to-left so the newest renders are handled first
-10. The current batch is defined by the newest visible batch at the top of the active Flow project, but the download pass must still harvest that batch from bottom-to-top and right-to-left
+10. Do not block completed images just because sibling images in the same batch are still rendering or have failed
 
 Background file watcher:
 
 - monitor the system downloads folder continuously during the session
-- treat only the current session batch as valid download targets; previous-session Flow renders in the same project must be ignored completely
+- treat only the current active session run as valid download scope; previous-session Flow renders in the same project must be ignored completely
 - when a new file appears:
   - rename it to `[trend_topic]_[series_slot]_L[loop_index]_[seq]_[date].png`
   - move it to `PROJECT_ROOT\downloads\[session_date]\`
@@ -230,16 +232,21 @@ Full-system rolling command surface:
 
 ```text
 Submit batch:          npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=submit-batch --prompt-ids=... --aspect=16:9|1:1
-Rolling downloader:    npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-nonblocking
-Recovery sweep only:   npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download
+Rolling downloader:    npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download
+Legacy alias:          npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-nonblocking
+Recovery sweep only:   npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-recovery
+Retry failed prompts:  npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=retry-failed
 ```
 
 Rule:
 
-- prefer `download-nonblocking`
-- use `download` only as a slower recovery sweep
-- both commands must filter against the current batch media IDs stored in `session_state.json`; they must not sweep old project renders
+- `download` is the default fully parallel downloader for this project
+- it must click `Download -> 2K` and move on immediately without waiting for the current file to finish before requesting the next ready image
+- use `download-recovery` only as a slower exact recovery sweep
+- both download commands must filter against the active session run baseline stored in `session_state.json`; they must not sweep old project renders from earlier sessions
 - submit the next prompt group without waiting for the previous group to fully render
+- if a targeted verification pass is needed for one group, use `submit-batch ... --wait-for-outcomes`
+- if the runtime records failed prompts for a group, use `retry-failed` immediately instead of leaving the batch incomplete
 
 Failure JSON trigger:
 
@@ -255,6 +262,16 @@ npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download
   - `reason_code = image_download_failed`
   - `reason_detail =` the real download error or fallback failure detail
 - any related partial file is moved there automatically
+
+Render failure rules:
+
+- a failed image does not block successful siblings from being downloaded
+- download requests themselves must remain nonblocking; once `Download -> 2K` is clicked for one ready image, move directly to the next ready image
+- if an image fails, first attempt the retry path instead of assuming a hard limit
+- retry method order:
+  - use the runtime retry flow for failed prompts
+  - if needed, re-submit the same prompt through the batch submit worker
+- every retry attempt must be logged to `automation.log`
 
 Step 3 complete signal:
 
@@ -276,7 +293,7 @@ After all available downloads finish for the current 8-slot set:
 - in `full_system` mode, each confirmed download should already be entering FIFO upscale/prepare
 - continue to the next trend
 
-This loop is rolling and non-blocking. Do not force perfect 4-image batch completeness before continuing work.
+This loop is rolling and non-blocking. Do not force perfect 4-image batch completeness before continuing work. Keep later batches moving while the downloader and retry flow resolve already-started batches in parallel.
 
 ---
 

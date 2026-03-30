@@ -257,7 +257,10 @@ Rules:
 - use the exact file-defined workflow for spawned agents; do not invent new agent instructions unless the file itself requires a runtime variable like date or stage name
 - every stage must run through Planner -> Generator -> Evaluator automatically; do not wait for a user prompt to add QA
 - File 02 must use the rolling nonblocking download path and FIFO background prepare by default; do not wait for all four images before downloading ready ones
-- do not block on `--wait-for-outcomes` between prompt groups; the next group can be queued while the downloader harvests the newest rendered images from the current group
+- File 02 must treat `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download` as the default fully parallel downloader and reserve `--action=download-recovery` for slower cleanup/recovery passes
+- do not block on `--wait-for-outcomes` between prompt groups; the next group can be queued while the downloader harvests the newest rendered images from already-running groups
+- File 02 must treat the run as an active session window: ignore all images that existed before the run baseline and only download renders created after that baseline
+- File 02 must not let one failed render block its successful siblings; retry failed prompts through the runtime and keep the rest of the pipeline moving
 - `instructions\03_IMAGE_UPSCALER.md` must generate full metadata for manual images before upscale
 - `instructions\04_METADATA_OPTIMIZER.md` should apply sidecars for all pipeline images and only use visual rebuild for outside-system Adobe uploads
 - log and stop if a required file path is missing or a stage verification fails

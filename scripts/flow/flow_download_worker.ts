@@ -33,6 +33,18 @@ type SessionState = {
   current_step?: string;
   images_downloaded_count?: number;
   downloaded_images?: Json[];
+  run_baseline_media_names?: string[];
+  active_batches?: Array<{
+    batch_id?: string;
+    prompt_ids?: number[];
+    aspect_ratio?: string;
+    rendered_media?: Array<{
+      prompt_id?: number | null;
+      media_name?: string;
+      href?: string | null;
+      tile_id?: string | null;
+    }>;
+  }>;
   errors?: string[];
   current_16x9_rendered?: string[];
   current_1x1_rendered?: string[];
@@ -285,6 +297,13 @@ function sortNewestFirst(images: GeneratedImage[]): GeneratedImage[] {
 
 function getCurrentBatchMediaNames(session: SessionState): Set<string> {
   const set = new Set<string>();
+  for (const batch of session.active_batches ?? []) {
+    for (const item of batch.rendered_media ?? []) {
+      if (item?.media_name) {
+        set.add(item.media_name);
+      }
+    }
+  }
   for (const item of session.last_render_batch?.rendered_media ?? []) {
     if (item?.media_name) {
       set.add(item.media_name);
@@ -305,6 +324,17 @@ function getCurrentBatchMediaNames(session: SessionState): Set<string> {
 
 function getCurrentBatchTargets(session: SessionState): Map<string, CurrentBatchTarget> {
   const map = new Map<string, CurrentBatchTarget>();
+  for (const batch of session.active_batches ?? []) {
+    for (const item of batch.rendered_media ?? []) {
+      if (item?.media_name) {
+        map.set(item.media_name, {
+          media_name: item.media_name,
+          href: item.href ?? null,
+          tile_id: item.tile_id ?? null,
+        });
+      }
+    }
+  }
   for (const item of session.last_render_batch?.rendered_media ?? []) {
     if (item?.media_name) {
       map.set(item.media_name, {
@@ -317,13 +347,20 @@ function getCurrentBatchTargets(session: SessionState): Map<string, CurrentBatch
   return map;
 }
 
+function getSessionRunBaseline(session: SessionState): Set<string> {
+  return new Set((session.run_baseline_media_names ?? []).filter(Boolean));
+}
+
 function buildDeterministicStem(
   mediaName: string,
   session: SessionState,
   currentBatchTargets: Map<string, CurrentBatchTarget>,
   descriptionsById: Map<number, Description>,
 ): string | null {
-  const renderedMedia = session.last_render_batch?.rendered_media ?? [];
+  const renderedMedia = [
+    ...((session.active_batches ?? []).flatMap((batch) => batch.rendered_media ?? [])),
+    ...(session.last_render_batch?.rendered_media ?? []),
+  ];
   const promptInfo = renderedMedia.find((item) => item.media_name === mediaName);
   const promptId = typeof promptInfo?.prompt_id === "number" ? promptInfo.prompt_id : null;
   if (promptId == null) {
@@ -577,9 +614,15 @@ async function main(): Promise<void> {
       .map((item) => String((item as Json).media_name ?? ""))
       .filter(Boolean),
   );
+  const sessionRunBaseline = getSessionRunBaseline(session);
   const currentBatchMediaNames = getCurrentBatchMediaNames(session);
   const currentBatchTargets = getCurrentBatchTargets(session);
-  const pendingImages = (currentBatchMediaNames.size
+  const sessionRunPending = sessionRunBaseline.size
+    ? allImages.filter((image) => !sessionRunBaseline.has(image.mediaName) && !alreadyDownloaded.has(image.mediaName))
+    : [];
+  const pendingImages = (sessionRunPending.length
+    ? sessionRunPending
+    : currentBatchMediaNames.size
     ? allImages.filter((image) => {
       if (!currentBatchMediaNames.has(image.mediaName)) {
         return false;

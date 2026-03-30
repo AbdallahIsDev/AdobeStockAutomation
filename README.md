@@ -130,7 +130,7 @@ PROJECT_ROOT\
 - `scripts/upscale_runtime.ps1`
   Runs FIFO single-image prepare or the normal batch upscale pass from one command surface.
 - `scripts/flow_runtime.ts`
-  Unified public entrypoint for Flow probe, submit, download, non-blocking download, and render-wait actions.
+  Unified public entrypoint for Flow probe, submit, default parallel download, recovery download, and render-wait actions.
 - `data/session_state.json`
   Current workflow checkpoint across stages.
 - `data/image_registry.json`
@@ -156,7 +156,10 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 - Manual images must receive complete metadata during File 03 before they are allowed to upscale.
 - File 02 treats policy violations as prompt rewrites, not account-limit failures.
 - File 02 downloads completed renders opportunistically and does not wait for a full batch to finish before continuing submission.
+- File 02 tracks one active session run baseline so old Flow project images stay ignored even when multiple new batches are in flight.
+- File 02 must retry failed prompts instead of leaving successful sibling renders blocked behind incomplete batches.
 - File 02 uses FIFO post-download prepare by default: download -> sidecar -> queue upscale -> continue immediately.
+- `npx --yes tsx scripts/flow_runtime.ts --action=download` is the default fully parallel downloader; `--action=download-recovery` is the slower recovery-only sweep.
 - Batch upscale remains available as a standalone recovery/cleanup path when explicitly invoked.
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.
 - File 03 must reconcile manual images dropped into `downloads/manual/`, generate their full metadata, and only then upscale them.

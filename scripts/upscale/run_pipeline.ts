@@ -10,6 +10,7 @@ import {
   IMAGE_REGISTRY_PATH,
   LOGS_DIR,
   ROOT,
+  SESSION_STATE_PATH,
   STAGING_DIR,
   UPSCALER_STATE_PATH,
 } from "../project_paths";
@@ -51,6 +52,14 @@ type UpscalerState = {
   method?: string | null;
 };
 
+type SessionDownload = {
+  saved_path?: string | null;
+};
+
+type SessionState = {
+  downloaded_images?: SessionDownload[];
+};
+
 type RunMode = "batch" | "fifo";
 
 type CliArgs = {
@@ -63,7 +72,7 @@ const OUTPUT_DIR = path.join(DOWNLOADS_DIR, "upscaled", dateFolderName());
 const MANUAL_DIR = path.join(DOWNLOADS_DIR, "manual");
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"]);
-const EXCLUDED_DIRS = new Set(["upscaled", "staging"]);
+const EXCLUDED_DIRS = new Set(["failed", "upscaled", "staging"]);
 const MANUAL_NAME_RE = /^manual_[a-z0-9_]+_M\d{3}_\d{8}\.[a-z0-9]+$/i;
 const DATE_FOLDER_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -255,6 +264,18 @@ function readSidecarStatus(sidecarPath: string): string | null {
   }
 }
 
+function readActiveSessionTargets(): Set<string> {
+  const sessionState = readJson<SessionState>(SESSION_STATE_PATH, {});
+  const targets = new Set<string>();
+  for (const item of sessionState.downloaded_images ?? []) {
+    if (typeof item.saved_path !== "string" || !item.saved_path.trim()) {
+      continue;
+    }
+    targets.add(normalizedAbsolute(item.saved_path));
+  }
+  return targets;
+}
+
 function classifySource(filePath: string): "ai_generated" | "manual" {
   const rel = windowsRelative(filePath);
   if (rel.startsWith("downloads\\manual\\")) {
@@ -414,6 +435,11 @@ function main(): void {
   const requestedImage = args.mode === "fifo" && args.image
     ? normalizedAbsolute(args.image)
     : null;
+  const activeSessionTargets = readActiveSessionTargets();
+  const restrictBatchToSessionTargets = args.mode === "batch" && activeSessionTargets.size > 0;
+  if (restrictBatchToSessionTargets) {
+    appendLog(`Batch upscale restricted to active session targets (${activeSessionTargets.size} image(s)).`);
+  }
 
   let fifoTargetNames: Set<string> | null = null;
   if (args.mode === "fifo") {
@@ -448,7 +474,13 @@ function main(): void {
     if (requestedImage && normalizedAbsolute(sourceImage) !== requestedImage) {
       continue;
     }
+    if (restrictBatchToSessionTargets && !activeSessionTargets.has(normalizedAbsolute(sourceImage))) {
+      continue;
+    }
     if (entry.upscaled) {
+      continue;
+    }
+    if (entry.adobe_stock_status === "failed_moved_to_downloads_failed") {
       continue;
     }
     if (entry.source === "manual") {

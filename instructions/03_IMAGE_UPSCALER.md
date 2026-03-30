@@ -12,6 +12,12 @@ This file supports two execution modes:
 - `batch` mode for normal stage-only runs
 - `fifo` mode for full-system runs where each newly downloaded image is prepared immediately
 
+Batch targeting rule:
+
+- for AI-generated images, `batch` mode must upscale only the images listed in the active session's `data\session_state.json -> downloaded_images`
+- do not rescan older dated download folders and do not pick historical library images just because they exist in `downloads\`
+- manual images in `downloads\manual\` still follow File 03 rules when File 03 is being run specifically for manual processing
+
 ---
 
 ## SUCCESS REPORT PREREQUISITE
@@ -124,12 +130,17 @@ Manual slug generation: strip extension and common camera prefixes (DSC\_, IMG\_
 Before any upscale work:
 
 1. load or create `image_registry.json`
-2. scan `downloads\` recursively; exclude `downloads\upscaled\`, `staging\`, and non-image files
+2. scan `downloads\` recursively; exclude `downloads\upscaled\`, `downloads\failed\`, `staging\`, and non-image files
 3. for each image not in registry: register it and ensure exactly one `.metadata.json` sidecar exists
 4. if AI image sidecar is missing: create a minimal bootstrap sidecar (mark `source: ai_generated`) and log a warning
 5. if a manual image has no sidecar: generate the full sidecar now during File 03 before upscale
 6. log orphan sidecars (sidecars with no matching image) for manual review
 7. do not proceed to upscaling until every image has exactly one sidecar
+
+Batch scope rule:
+
+- if `session_state.json` contains `downloaded_images`, treat that list as the only valid AI-generated batch for this run
+- if an image is not in the active session batch, do not upscale it in `batch` mode
 
 Failure quarantine rule:
 

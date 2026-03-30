@@ -13,6 +13,7 @@ type SessionState = {
   current_project_id?: string;
   current_step?: string;
   current_aspect_ratio?: string;
+  run_baseline_media_names?: string[];
   current_16x9_rendered?: string[];
   current_16x9_failed?: number[];
   current_1x1_rendered?: string[];
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
 
   const session = readJson<SessionState>(SESSION_STATE_PATH, {});
   const known = new Set((session.downloaded_images ?? []).map((item) => item.media_name));
+  const baseline = new Set((session.run_baseline_media_names ?? []).filter(Boolean));
 
   const browser = await connectBrowser(9222);
   try {
@@ -104,7 +106,10 @@ async function main(): Promise<void> {
         }).filter((item) => item.media_name);
       }, GENERATED_IMAGE_SELECTOR) as Array<{ media_name: string; href: string | null; tile_id: string | null }>;
 
-      fresh = rendered.filter((item) => !known.has(item.media_name)).slice(0, expected);
+      fresh = rendered
+        .filter((item) => !known.has(item.media_name))
+        .filter((item) => !baseline.size || !baseline.has(item.media_name))
+        .slice(0, expected);
       failedCount = Math.max(0, (await countPolicyViolationTiles(page)) - baselinePolicyViolations);
       if (fresh.length + failedCount >= expected) {
         break;

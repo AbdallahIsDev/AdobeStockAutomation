@@ -14,17 +14,21 @@ async function main(): Promise<void> {
       await import("./flow/flow_batch_submit_worker");
       return;
     case "download":
-      await import("./flow/flow_download_worker");
-      return;
     case "download-nonblocking":
       await import("./flow/flow_nonblocking_download_worker");
+      return;
+    case "download-recovery":
+      await import("./flow/flow_download_worker");
       return;
     case "wait-renders":
       await import("./flow/flow_wait_for_new_renders");
       return;
+    case "retry-failed":
+      await import("./flow/flow_retry_failed_prompts");
+      return;
     default:
       throw new Error(
-        "Usage: --action=probe|submit-batch|download|download-nonblocking|wait-renders",
+        "Usage: --action=probe|submit-batch|download|download-nonblocking|download-recovery|wait-renders|retry-failed",
       );
   }
 }

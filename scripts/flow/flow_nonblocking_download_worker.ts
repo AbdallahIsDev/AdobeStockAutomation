@@ -29,6 +29,7 @@ type SessionState = {
   current_step?: string;
   images_downloaded_count?: number;
   downloaded_images?: DownloadedImage[];
+  run_baseline_media_names?: string[];
   errors?: string[];
   current_16x9_rendered?: string[];
   current_1x1_rendered?: string[];
@@ -82,6 +83,9 @@ const BROWSER_PROBE_PATH = path.join(DATA_DIR, "browser_probe.json");
 const UPSCALE_RUNTIME_PATH = path.join(ROOT, "scripts", "upscale_runtime.ps1");
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
 const CDP_PORT = 9222;
+const BETWEEN_REQUESTS_MS = 150;
+const DOWNLOAD_SETTLE_TIMEOUT_MS = 90000;
+const DOWNLOAD_POLL_MS = 1000;
 
 function readJson<T>(filePath: string, fallback: T): T {
   try {
@@ -192,10 +196,14 @@ function getCurrentBatchTargets(session: SessionState): Map<string, CurrentBatch
   return map;
 }
 
+function getSessionRunBaseline(session: SessionState): Set<string> {
+  return new Set((session.run_baseline_media_names ?? []).filter(Boolean));
+}
+
 async function openDownloadSubmenu(page: Page, mediaName: string): Promise<boolean> {
   return page.evaluate(async (targetMediaName) => {
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 40));
     const images = Array.from(document.querySelectorAll("img[alt=\"Generated image\"]"));
     const target = images.find((img) => {
       const src = img.getAttribute("src") || "";
@@ -217,7 +225,7 @@ async function openDownloadSubmenu(page: Page, mediaName: string): Promise<boole
       clientX: rect.left + rect.width / 2,
       clientY: rect.top + rect.height / 2,
     }));
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 120));
     const downloadItem = Array.from(document.querySelectorAll("[role=\"menuitem\"]"))
       .find((el) => (el.textContent || "").includes("Download")) as HTMLElement | undefined;
     if (!downloadItem) return false;
@@ -226,7 +234,7 @@ async function openDownloadSubmenu(page: Page, mediaName: string): Promise<boole
       cancelable: true,
       view: window,
     }));
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     return true;
   }, mediaName);
 }
@@ -386,12 +394,12 @@ async function submitPass(
         continue;
       }
       appendLog(`${mode} request submitted for ${image.mediaName} on attempt ${attempt}.`);
-      await sleep(1000);
+      await sleep(BETWEEN_REQUESTS_MS);
     }
 
-    const deadline = Date.now() + 90000;
+    const deadline = Date.now() + DOWNLOAD_SETTLE_TIMEOUT_MS;
     while (Date.now() < deadline && completed.size < images.length) {
-      await sleep(1000);
+      await sleep(DOWNLOAD_POLL_MS);
     }
 
     for (const saved of completed.values()) {
@@ -424,9 +432,15 @@ async function main(): Promise<void> {
 
   const allImages = sortNewestFirst(await getGeneratedImages(page));
   const downloadedSet = new Set((session.downloaded_images ?? []).map((item) => item.media_name));
+  const sessionRunBaseline = getSessionRunBaseline(session);
   const currentBatchMediaNames = getCurrentBatchMediaNames(session);
   const currentBatchTargets = getCurrentBatchTargets(session);
-  let pending = allImages.filter((image) =>
+  const sessionRunPending = sessionRunBaseline.size
+    ? allImages.filter((image) => !sessionRunBaseline.has(image.mediaName) && !downloadedSet.has(image.mediaName))
+    : [];
+  let pending = sessionRunPending.length
+    ? sessionRunPending
+    : allImages.filter((image) =>
     currentBatchMediaNames.has(image.mediaName)
       && !downloadedSet.has(image.mediaName)
       && (() => {
@@ -443,7 +457,7 @@ async function main(): Promise<void> {
         return true;
       })(),
   );
-  if (!pending.length && currentBatchMediaNames.size === 0) {
+  if (!pending.length && currentBatchMediaNames.size === 0 && !sessionRunBaseline.size) {
     pending = allImages.filter((image) => !downloadedSet.has(image.mediaName));
   }
   if (!pending.length) {
