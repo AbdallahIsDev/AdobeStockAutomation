@@ -2,6 +2,8 @@
 data/
 downloads/
 logs/
+project_backups/*
+!project_backups/.gitkeep
 staging/*
 !staging/.gitkeep
 !staging/copy_only/

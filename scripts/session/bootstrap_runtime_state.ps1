@@ -2,6 +2,9 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $dataDir = Join-Path $projectRoot "data"
+$downloadsDir = Join-Path $projectRoot "downloads"
+$logsDir = Join-Path $projectRoot "logs"
+$backupScript = Join-Path $PSScriptRoot "backup_project_state.ps1"
 
 function Convert-ToPlainObject {
   param([Parameter(ValueFromPipeline = $true)]$InputObject)
@@ -97,12 +100,36 @@ function Ensure-JsonFile {
   Set-Content -Path $Path -Value ($json + "`r`n") -Encoding UTF8
 }
 
+function Test-HistoricalProjectState {
+  $hasDownloadHistory = Test-Path $downloadsDir -and (Get-ChildItem -Path $downloadsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+  $hasLogHistory = Test-Path $logsDir -and (Get-ChildItem -Path $logsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+  return [bool]($hasDownloadHistory -or $hasLogHistory)
+}
+
 $now = Get-Date
 $nowJson = $now.ToString("yyyy-MM-dd__HH:mm:ss")
 $today = $now.ToString("yyyy-MM-dd")
 $validUntilJson = $now.AddHours(4).ToString("yyyy-MM-dd__HH:mm:ss")
 
 New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+
+$criticalRuntimeFiles = @(
+  (Join-Path $dataDir "session_state.json"),
+  (Join-Path $dataDir "image_registry.json"),
+  (Join-Path $dataDir "trend_data.json"),
+  (Join-Path $dataDir "descriptions.json")
+)
+
+$missingCriticalFiles = @($criticalRuntimeFiles | Where-Object { -not (Test-Path $_) })
+$hasHistoricalProjectState = Test-HistoricalProjectState
+
+if ($hasHistoricalProjectState -and $missingCriticalFiles.Count -gt 0) {
+  throw ("Refusing bootstrap because historical project state exists and critical runtime files are missing. Missing: {0}. Use `powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\\scripts\\session_runtime.ps1 -Action reconcile` instead of recreating empty JSON state." -f ($missingCriticalFiles -join ", "))
+}
+
+if ($hasHistoricalProjectState) {
+  & $backupScript -Auto -Reason "bootstrap_preflight" -MinAgeHours 6 | Out-Null
+}
 
 $seriesStructure = [ordered]@{
   "16:9" = @("16A_establishing", "16B_detail", "16C_scale", "16D_alt")

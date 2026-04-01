@@ -69,10 +69,22 @@ Prompt rules:
 - optimize for stock usefulness, not artistic novelty alone
 - every trend must be strong enough to support the full 8-slot series
 
-If runtime JSON files are missing, run:
+If runtime JSON files are missing on a fresh first-time project, run:
 
 ```text
 powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action bootstrap
+```
+
+If the project already has historical downloads/logs and runtime JSON is missing or damaged, do not bootstrap. Run:
+
+```text
+powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action reconcile
+```
+
+Before risky model/provider experiments, create a local-state backup first:
+
+```text
+powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action backup
 ```
 
 If this is a stage-only run, set mode with:

@@ -54,6 +54,16 @@ Full system: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\sessi
 Stage only:  powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage trend_research
 ```
 
+State safety rule:
+
+```text
+- bootstrap is for a fresh project only
+- if runtime JSON is missing but historical downloads/logs already exist, run:
+  powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action reconcile
+- before risky testing, run:
+  powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action backup
+```
+
 Then perform this reduced boot sequence:
 
 ```text

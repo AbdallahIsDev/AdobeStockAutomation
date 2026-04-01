@@ -65,7 +65,9 @@ This skill exists to force both of these requirements:
 If the user says "execute Adobe Stock Automation System", "run Adobe Stock Automation System", or points to this skill, use this order:
 
 ```text
-0. Run PROJECT_ROOT\scripts\session_runtime.ps1 -Action bootstrap once if runtime JSON files are missing.
+0. If this is a truly fresh project with no historical runtime state, run PROJECT_ROOT\scripts\session_runtime.ps1 -Action bootstrap once.
+   If historical downloads or logs already exist and runtime JSON is missing or damaged, do not bootstrap; run PROJECT_ROOT\scripts\session_runtime.ps1 -Action reconcile instead.
+   Before risky experiments or provider/model tests, create a local-state snapshot with PROJECT_ROOT\scripts\session_runtime.ps1 -Action backup.
 1. Read instructions\STOCK_SUCCESS_REPORT.md first.
    Save the full report into active memory/context before any stage work begins.
 2. For full-system runs, run PROJECT_ROOT\scripts\session_runtime.ps1 -Action full-system to initialize the session,
@@ -257,6 +259,7 @@ Rules:
 - if a stage file requires sub-agents, do not skip them
 - use the exact file-defined workflow for spawned agents; do not invent new agent instructions unless the file itself requires a runtime variable like date or stage name
 - every stage must run through Planner -> Generator -> Evaluator automatically; do not wait for a user prompt to add QA
+- GitHub is the recovery path for tracked code/docs; `project_backups/` is the recovery path for local runtime state that Git does not protect
 - File 02 must use the rolling nonblocking download path and FIFO background prepare by default; do not wait for all four images before downloading ready ones
 - File 02 must treat `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download` as the default fully parallel downloader and reserve `--action=download-recovery` for slower cleanup/recovery passes
 - do not block on `--wait-for-outcomes` between prompt groups; the next group can be queued while the downloader harvests the newest rendered images from already-running groups

@@ -2,6 +2,14 @@
 
 This project is a four-stage Adobe Stock production pipeline built around trend research, Google Flow image generation, Upscayl-based upscaling, and Adobe Stock metadata application.
 
+## State Protection
+
+- GitHub is the restore source for tracked project files such as `scripts/`, `instructions/`, `README.md`, and `SKILL.md`.
+- Local backups are focused on the non-Git runtime state that would otherwise be lost: `data/`, `logs/`, and `staging/`.
+- `downloads/` is intentionally excluded from project backups because it is the heaviest folder and the image files themselves already live there as the source of truth.
+- Use `powershell -ExecutionPolicy Bypass -File scripts\session_runtime.ps1 -Action backup` to create a local-state snapshot before risky experiments.
+- Use `powershell -ExecutionPolicy Bypass -File scripts\session_runtime.ps1 -Action reconcile` to rebuild runtime JSON from disk if the state folder is missing or damaged.
+
 ## What This Project Does
 
 1. Researches commercially promising stock trends and ranks them for execution.
@@ -90,6 +98,9 @@ PROJECT_ROOT\
 │   ├── automation.log                  ← Shared runtime + Upscayl log
 │   └── screenshots\                    ← Targeted browser evidence captures
 │
+├── project_backups\                    ← Local-state snapshots for gitignored runtime folders
+│   └── .gitkeep
+│
 └── depends on C:\Users\11\browser-automation-core\
     ├── launch_browser.bat
     ├── launch_browser.ps1
@@ -107,6 +118,10 @@ PROJECT_ROOT\
   Shared helpers used across multiple stages, including failed-asset quarantine.
 - `scripts/session_runtime.ps1`
   Unified public entrypoint for bootstrap, full-system session setup, and stage-only session setup.
+- `scripts/session_runtime.ps1 -Action backup`
+  Creates a local-state snapshot for gitignored runtime folders without copying the heavy `downloads/` tree.
+- `scripts/session_runtime.ps1 -Action reconcile`
+  Restores runtime JSON from backup data when supplied and syncs registry/session state from the actual files on disk.
 - `scripts/upscale_runtime.ps1`
   Unified public entrypoint for FIFO single-image prepare and batch upscale runs.
 - `scripts/flow/`
@@ -123,6 +138,8 @@ PROJECT_ROOT\
   Temporary upscale buckets used by the cleaned 02 pipeline.
 - `logs/`
   Shared runtime log for automation and Upscayl output, plus screenshot evidence when needed.
+- `project_backups/`
+  Local snapshots focused on gitignored runtime state that GitHub cannot restore for you.
 
 ## Important State Files
 
@@ -168,6 +185,7 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.
 - File 03 must reconcile manual images dropped into `downloads/manual/`, generate their full metadata, and only then upscale them.
 - Failed-asset `.failure.json` files are auto-created by the Flow and Upscale runtime commands; they are not written manually in the markdown instructions.
+- `bootstrap` is only for a truly fresh project with no historical runtime state; if `data/` is missing but `downloads/` or `logs/` already exist, use `session_runtime.ps1 -Action reconcile` instead of recreating empty JSON.
 
 ## Current Layout
 
