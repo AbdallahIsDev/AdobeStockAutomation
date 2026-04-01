@@ -14,7 +14,7 @@ This project is a four-stage Adobe Stock production pipeline built around trend 
 
 1. Researches commercially promising stock trends and ranks them for execution.
 2. Generates and downloads image series from Google Flow with sidecar metadata for every successful image.
-3. Normalizes, registers, and upscales downloaded images to a 4K-ready output set, with FIFO post-download prepare as the default and batch mode available for standalone upscale runs.
+3. Normalizes, registers, and upscales downloaded images to a 4K-ready output set, with FIFO post-download prepare as the default and 16-image batch chunks for standalone upscale runs.
 4. Applies the prepared metadata to Adobe Stock upload items so the final review can be done quickly.
 
 ## Main Workflow
@@ -145,6 +145,9 @@ PROJECT_ROOT\
 
 - `scripts/session_runtime.ps1`
   Runs bootstrap, full-system session setup, or stage-only session setup from one command surface.
+- `scripts/session_runtime.ps1 -Action build-descriptions`
+  Builds the dynamic prompt inventory from `trend_data.json`, applies the 64-image session cap, and carries extra trends forward to the next run.
+  This is a session-start step and should not be rerun after a live generation session has already started.
 - `scripts/upscale_runtime.ps1`
   Runs FIFO single-image prepare or the normal batch upscale pass from one command surface.
 - `scripts/flow_runtime.ts`
@@ -156,7 +159,7 @@ PROJECT_ROOT\
 - `data/upscaler_state.json`
   Upscayl CLI/GUI configuration and processing defaults.
 - `data/descriptions.json`
-  Generated prompt inventory for the current trend session.
+  Dynamically generated prompt inventory for the current session plus any deferred trends for the next one.
 - `data/trend_data.json`
   Ranked trend research output.
 
@@ -174,12 +177,17 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 - Manual images must receive complete metadata during File 03 before they are allowed to upscale.
 - File 02 treats policy violations as prompt rewrites, not account-limit failures.
 - File 02 downloads completed renders opportunistically and does not wait for a full batch to finish before continuing submission.
+- File 02 uses a per-session cap of 64 images total: 32 wide and 32 square.
+- That 64-image limit is per session, not per day. Starting a new session later the same day should give a fresh 64-image budget.
 - File 02 tracks one active session run baseline so old Flow project images stay ignored even when multiple new batches are in flight.
 - File 02 must retry failed prompts instead of leaving successful sibling renders blocked behind incomplete batches.
 - File 02 uses FIFO post-download prepare by default: download -> sidecar -> queue upscale -> continue immediately.
+- File 02 builds `descriptions.json` dynamically from the actual ranked trend list; it must never assume a fixed total like 32 prompts.
+- File 02 queues at most 8 trends per session and stores overflow trends as carry-forward work for the next session.
 - `npx --yes tsx scripts/flow_runtime.ts --action=download` is the default fully parallel downloader; `--action=download-recovery` is the slower recovery-only sweep.
 - `npx --yes tsx scripts/flow_runtime.ts --action=recover-failures` is the scripted repair path for visible Flow failed tiles that escaped normal batch-state handling.
 - File 03 batch upscale is a sync/catch-up pass only for images not already marked `upscaled = true`.
+- File 03 batch upscale runs in 16-image chunks so a full 64-image session resolves in four clean upscale batches.
 - File 03 writes outputs into `downloads/upscaled/[source_download_date]`, so the upscaled folder matches the image's real source date.
 - Batch upscale remains available as a standalone recovery/cleanup path when explicitly invoked.
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.

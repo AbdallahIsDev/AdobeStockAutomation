@@ -17,6 +17,7 @@ Batch targeting rule:
 - for AI-generated images, `batch` mode must upscale only the images listed in the active session's `data\session_state.json -> downloaded_images`
 - do not rescan older dated download folders and do not pick historical library images just because they exist in `downloads\`
 - manual images in `downloads\manual\` still follow File 03 rules when File 03 is being run specifically for manual processing
+- normal `batch` mode must process pending session images in groups of 16 so the session stays aligned with the 64-image creation cap
 
 ---
 
@@ -308,6 +309,13 @@ Batch execution order:
 2. `x2`
 3. `x3`
 4. `x4`
+
+Batch sizing rule:
+
+- normal batch mode processes upscale work in chunks of 16 images
+- a full 64-image session therefore resolves as 4 upscale chunks at most
+- if the final chunk is not a clean expected session remainder, log it for review
+- odd counts are a warning sign: this pipeline should normally move in 4 / 8 / 16 / 64 image units
 
 For each batch:
 

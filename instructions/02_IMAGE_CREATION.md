@@ -68,6 +68,17 @@ Prompt rules:
 - no repeated prompt phrasing across the same 8-image set
 - optimize for stock usefulness, not artistic novelty alone
 - every trend must be strong enough to support the full 8-slot series
+- descriptions must be built dynamically from the actual ranked trend list, never from a fixed hardcoded count
+
+Session cap rule:
+
+- one session may create at most 64 images total
+- that means 32 wide (`16:9`) and 32 square (`1:1`)
+- because each trend needs 8 images, one session may queue at most 8 trends
+- if there are more ranked trends than the current session can handle, mark the extra trends as `deferred_next_session`
+- the next session must start from those deferred trends first, then continue with newer trends
+- this is a per-session cap, not a per-calendar-day cap
+- if you intentionally start a new session later on the same day, it gets a fresh 64-image budget
 
 If runtime JSON files are missing on a fresh first-time project, run:
 
@@ -81,6 +92,14 @@ If the project already has historical downloads/logs and runtime JSON is missing
 powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action reconcile
 ```
 
+Build the dynamic description inventory from `trend_data.json` with:
+
+```text
+powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action build-descriptions
+```
+
+Run this only at session start. Do not rebuild `descriptions.json` after image generation has already begun for the active session.
+
 Before risky model/provider experiments, create a local-state backup first:
 
 ```text
@@ -93,13 +112,19 @@ If this is a stage-only run, set mode with:
 powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage image_creation
 ```
 
-The bootstrap script creates `descriptions.json`. This stage must fill these keys:
+The runtime creates `descriptions.json`. This stage must fill these keys:
 
 - `generated_at`
 - `total_descriptions`
+- `session_active_descriptions`
+- `deferred_descriptions`
+- `session_image_cap`
+- `session_aspect_cap`
+- `session_trend_cap`
 - `loop_index`
 - `descriptions_per_trend`
 - `series_structure`
+- `carry_forward_trends[]`
 - `descriptions[]`
 
 Each `descriptions[]` item must include:
@@ -113,6 +138,9 @@ Each `descriptions[]` item must include:
 - `prompt_text`
 - `commercial_tags`
 - `status`
+- `prompt_batch`
+- `prompt_batch_type`
+- `deferred_until_next_session`
 
 ---
 
@@ -212,6 +240,8 @@ For each ranked trend:
 5. Do not wait for the first 4-image batch to fully render before starting the next 4-image batch
 6. In full-system runs, do not block on `--wait-for-outcomes` before moving the pipeline forward unless you are doing a targeted verification or retry pass
 7. Once the current 4-prompt group is queued, the rolling downloader may start harvesting completed renders while the next group is already being prepared or submitted
+8. never queue prompts whose description status is `deferred_next_session`
+9. once the session reaches 32 wide prompts, stop wide generation for that session
 
 ### Phase 2 - Wait and download 16:9
 
@@ -298,6 +328,14 @@ Step 3 complete signal:
 ### Phase 3 - 1:1 group
 
 Repeat the same pattern for 1A, 1B, 1C, 1D.
+
+Session stop rule:
+
+- once `images_created_count = 64`, stop generation for the current session
+- once `images_created_16x9_count = 32`, do not submit more wide prompts in this session
+- once `images_created_1x1_count = 32`, do not submit more square prompts in this session
+- if the operator wants another 64-image run on the same day, start a new session and rebuild the description inventory
+- a new session must prioritize `carry_forward_trends` before new trend topics
 
 ### Phase 4 - Move to next trend
 
@@ -404,14 +442,17 @@ Maintain these operational fields in `session_state.json`:
 
 - `session_date`, `session_started_at`
 - `pipeline_mode`, `post_download_policy`
+- `session_image_cap`, `session_aspect_cap`, `session_upscale_batch_size`, `session_trend_cap`
 - `current_stage`, `last_completed_stage`, `current_step`
 - `current_account_index`, `current_account_email`, `current_model`
 - `current_aspect_ratio`
 - `loop_index`, `current_description_index`
 - `current_project_url`, `current_project_id`
 - `current_trend_id`, `current_series_slot`
+- `queued_trend_ids`, `deferred_trend_ids`
+- `remaining_session_image_capacity`, `remaining_16x9_capacity`, `remaining_1x1_capacity`
 - `descriptions_queue`
-- `images_created_count`, `images_downloaded_count`, `downloads_completed`
+- `images_created_count`, `images_created_16x9_count`, `images_created_1x1_count`, `images_downloaded_count`, `downloads_completed`
 - `upscale_requested_ids`, `downloaded_images`
 - `current_16x9_submitted`, `current_16x9_rendered`, `current_16x9_failed`, `current_16x9_downloaded`
 - `current_1x1_submitted`, `current_1x1_rendered`, `current_1x1_failed`, `current_1x1_downloaded`

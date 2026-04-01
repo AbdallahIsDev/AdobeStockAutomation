@@ -72,7 +72,8 @@ Then perform this reduced boot sequence:
 3. Refresh static cache only if missing, expired (90+ days), or force_refresh=true.
 4. Reuse dynamic cache if still inside the 4-hour window; otherwise refresh it.
 5. Save ranked output to trend_data.json.
-6. Handoff to 02_IMAGE_CREATION.md.
+6. Build the dynamic description inventory from the ranked trends.
+7. Handoff to 02_IMAGE_CREATION.md.
 ```
 
 Keep `session_state.json` focused on the fields required to resume and audit the run:
@@ -85,6 +86,8 @@ Keep `session_state.json` focused on the fields required to resume and audit the
 - `static_cache_status`, `static_cache_age_days`
 - `dynamic_cache_status`, `dynamic_cache_valid_until`
 - `images_created_count`, `images_downloaded_count`
+- `session_image_cap`, `session_aspect_cap`, `session_trend_cap`
+- `queued_trend_ids`, `deferred_trend_ids`
 - `errors`, `accounts`
 
 Keep `accounts.json` minimal and non-sensitive in the repo:
@@ -418,6 +421,20 @@ Rules:
 ---
 
 ## HANDOFF TO `02_IMAGE_CREATION.md`
+
+Before File 02 starts, build the prompt inventory dynamically from the current ranked trends:
+
+```text
+powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action build-descriptions
+```
+
+Rules:
+
+- do not hardcode a fixed prompt count like 32
+- generate 8 prompts per trend
+- queue at most 8 trends for the current session (64 images total)
+- move any extra ranked trends into `carry_forward_trends` for the next session
+- do not rebuild the description inventory in the middle of a live generation session; rebuild only when starting a fresh session
 
 When `trend_data.json` is ready:
 

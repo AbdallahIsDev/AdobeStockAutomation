@@ -11,10 +11,17 @@ $upscaledDir = Join-Path $downloadsDir "upscaled"
 $manualDir = Join-Path $downloadsDir "manual"
 $backupScript = Join-Path $PSScriptRoot "backup_project_state.ps1"
 $now = Get-Date
-$nowJson = $now.ToString("yyyy-MM-dd__HH:mm:ss")
 $imageExtensions = @(".png", ".jpg", ".jpeg", ".webp")
 
 Add-Type -AssemblyName System.Drawing
+
+function Format-ProjectTimestamp {
+  param([datetime]$Date)
+
+  return "{0}__{1} {2}" -f $Date.ToString("yyyy-MM-dd"), $Date.ToString("hh:mm:ss"), $Date.ToString("tt")
+}
+
+$nowJson = Format-ProjectTimestamp -Date $now
 
 function Convert-ToPlainObject {
   param([Parameter(ValueFromPipeline = $true)]$InputObject)
@@ -150,7 +157,7 @@ function New-DownloadedImageRecord {
     $record = Convert-ToPlainObject $Existing
     $record.saved_path = $File.FullName
     if (-not $record.downloaded_at) {
-      $record.downloaded_at = $File.LastWriteTime.ToString("yyyy-MM-dd__HH:mm:ss")
+      $record.downloaded_at = Format-ProjectTimestamp -Date $File.LastWriteTime
     }
     return $record
   }
@@ -164,7 +171,7 @@ function New-DownloadedImageRecord {
     saved_path = $File.FullName
     suggested_filename = $File.Name
     download_attempt = 1
-    downloaded_at = $File.LastWriteTime.ToString("yyyy-MM-dd__HH:mm:ss")
+    downloaded_at = Format-ProjectTimestamp -Date $File.LastWriteTime
     note = "Reconciled from disk."
   }
 }
@@ -245,7 +252,7 @@ foreach ($directory in $sourceDirs) {
     if (-not $entry.Contains("upscaled")) { $entry.upscaled = $false }
     if (-not $entry.Contains("upscaled_path")) { $entry.upscaled_path = $null }
     if (-not $entry.Contains("upscaled_dimensions")) { $entry.upscaled_dimensions = $null }
-    if (-not $entry.registered_at) { $entry.registered_at = $file.LastWriteTime.ToString("yyyy-MM-dd__HH:mm:ss") }
+    if (-not $entry.registered_at) { $entry.registered_at = Format-ProjectTimestamp -Date $file.LastWriteTime }
     if (-not $entry.Contains("upscaled_at")) { $entry.upscaled_at = $null }
     if (-not $entry.adobe_stock_status) { $entry.adobe_stock_status = "not_uploaded" }
     if (-not $entry.Contains("trend_topic")) { $entry.trend_topic = $null }
@@ -270,7 +277,7 @@ if (Test-Path $upscaledDir) {
           long_side = $null
           assigned_scale = Get-AssignedScale -Filename $filename -ExistingValue $null
           metadata_sidecar = $null
-          registered_at = $file.LastWriteTime.ToString("yyyy-MM-dd__HH:mm:ss")
+          registered_at = Format-ProjectTimestamp -Date $file.LastWriteTime
           adobe_stock_status = "not_uploaded"
           trend_topic = $null
           series_slot = $null
@@ -283,7 +290,7 @@ if (Test-Path $upscaledDir) {
       $entry.upscaled = $true
       $entry.upscaled_path = Get-ProjectRelativePath $file.FullName
       $entry.upscaled_dimensions = $upscaledDimensions
-      $entry.upscaled_at = $file.LastWriteTime.ToString("yyyy-MM-dd__HH:mm:ss")
+      $entry.upscaled_at = Format-ProjectTimestamp -Date $file.LastWriteTime
 
       $imagesMap[$filename] = $entry
     }

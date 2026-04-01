@@ -12,6 +12,8 @@ type Description = {
   series_slot: string;
   aspect_ratio: string;
   prompt_text: string;
+  status?: string;
+  submitted_at?: string | null;
 };
 
 type DownloadedImage = {
@@ -35,6 +37,16 @@ type SessionState = {
   current_aspect_ratio?: string;
   current_step?: string;
   current_description_index?: number;
+  current_trend_id?: number | null;
+  current_series_slot?: string | null;
+  images_created_count?: number;
+  images_created_16x9_count?: number;
+  images_created_1x1_count?: number;
+  session_image_cap?: number;
+  session_aspect_cap?: number;
+  remaining_session_image_capacity?: number;
+  remaining_16x9_capacity?: number;
+  remaining_1x1_capacity?: number;
   current_16x9_submitted?: number[];
   current_1x1_submitted?: number[];
   current_16x9_rendered?: string[];
@@ -65,6 +77,15 @@ type SessionState = {
     captured_at: string;
   };
 };
+
+const TERMINAL_DESCRIPTION_STATUSES = new Set([
+  "submitted",
+  "rendered_ready",
+  "downloaded",
+  "upscale_queued",
+  "upscaled",
+  "ready_for_metadata_apply",
+]);
 
 const PROMPT_SELECTOR = "[role=\"textbox\"][data-slate-editor=\"true\"]";
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
@@ -327,8 +348,39 @@ async function main(): Promise<void> {
     }
     return description;
   });
+  const promptsToSubmit = prompts.filter((prompt) => !TERMINAL_DESCRIPTION_STATUSES.has(prompt.status ?? ""));
 
   const session = readJson<SessionState>(SESSION_STATE_PATH, {});
+  const sessionImageCap = session.session_image_cap ?? 64;
+  const sessionAspectCap = session.session_aspect_cap ?? 32;
+  const newWidePrompts = promptsToSubmit.filter((prompt) => prompt.aspect_ratio === "16:9");
+  const newSquarePrompts = promptsToSubmit.filter((prompt) => prompt.aspect_ratio === "1:1");
+
+  for (const prompt of prompts) {
+    if (prompt.status === "deferred_next_session") {
+      throw new Error(`Prompt ${prompt.id} is deferred to the next session and cannot be submitted in the current 64-image run.`);
+    }
+  }
+
+  if (!promptsToSubmit.length) {
+    appendLog(`Skipping submit for prompt ids ${promptIds.join(", ")} because they are already in a terminal submitted/downloaded state.`);
+    return;
+  }
+
+  const projectedTotal = (session.images_created_count ?? 0) + newWidePrompts.length + newSquarePrompts.length;
+  const projectedWide = (session.images_created_16x9_count ?? 0) + newWidePrompts.length;
+  const projectedSquare = (session.images_created_1x1_count ?? 0) + newSquarePrompts.length;
+
+  if (projectedTotal > sessionImageCap) {
+    throw new Error(`Session image cap exceeded. Current=${session.images_created_count ?? 0}, requested=${newWidePrompts.length + newSquarePrompts.length}, cap=${sessionImageCap}. Start a new session to get another 64-image budget.`);
+  }
+  if (projectedWide > sessionAspectCap) {
+    throw new Error(`16:9 session cap exceeded. Current=${session.images_created_16x9_count ?? 0}, requested=${newWidePrompts.length}, cap=${sessionAspectCap}.`);
+  }
+  if (projectedSquare > sessionAspectCap) {
+    throw new Error(`1:1 session cap exceeded. Current=${session.images_created_1x1_count ?? 0}, requested=${newSquarePrompts.length}, cap=${sessionAspectCap}.`);
+  }
+
   const browser = await connectBrowser(9222);
   try {
     const urlPattern = session.current_project_id ? `/fx/tools/flow/project/${session.current_project_id}` : "/fx/tools/flow";
@@ -350,9 +402,9 @@ async function main(): Promise<void> {
       session.run_baseline_media_names = [...existingMedia];
     }
     const submittedAt = jsonTimestamp();
-    const batchId = `${submittedAt}__${aspectRatio}__${promptIds[0]}-${promptIds[promptIds.length - 1]}`;
+    const batchId = `${submittedAt}__${aspectRatio}__${promptsToSubmit[0]?.id ?? promptIds[0]}-${promptsToSubmit[promptsToSubmit.length - 1]?.id ?? promptIds[promptIds.length - 1]}`;
 
-    for (const prompt of prompts) {
+    for (const prompt of promptsToSubmit) {
       await dismissToast(page);
       await fillPrompt(page, prompt.prompt_text);
       await clickCreate(page);
@@ -362,16 +414,29 @@ async function main(): Promise<void> {
 
     const submittedField = aspectRatio === "16:9" ? "current_16x9_submitted" : "current_1x1_submitted";
     const failedField = aspectRatio === "16:9" ? "current_16x9_failed" : "current_1x1_failed";
-    session[submittedField] = promptIds;
+    session[submittedField] = promptsToSubmit.map((prompt) => prompt.id);
     session[failedField] = [];
     session.current_aspect_ratio = aspectRatio;
     session.current_step = "STEP_RENDERING_IN_PROGRESS";
+    session.images_created_count = projectedTotal;
+    session.images_created_16x9_count = projectedWide;
+    session.images_created_1x1_count = projectedSquare;
+    session.remaining_session_image_capacity = sessionImageCap - projectedTotal;
+    session.remaining_16x9_capacity = sessionAspectCap - projectedWide;
+    session.remaining_1x1_capacity = sessionAspectCap - projectedSquare;
+    session.current_description_index = promptsToSubmit[0]?.id ?? session.current_description_index ?? null;
+    session.current_trend_id = promptsToSubmit[0]?.trend_id ?? session.current_trend_id ?? null;
+    session.current_series_slot = promptsToSubmit[0]?.series_slot ?? session.current_series_slot ?? null;
+    for (const prompt of promptsToSubmit) {
+      prompt.status = "submitted";
+      prompt.submitted_at = submittedAt;
+    }
     const activeBatches = Array.isArray(session.active_batches) ? session.active_batches : [];
     const batchRecord = {
       batch_id: batchId,
-      prompt_ids: promptIds,
+      prompt_ids: promptsToSubmit.map((prompt) => prompt.id),
       aspect_ratio: aspectRatio,
-      expected_count: promptIds.length,
+      expected_count: promptsToSubmit.length,
       rendered_media: [],
       failed_prompts: [],
       submitted_at: submittedAt,
@@ -382,20 +447,22 @@ async function main(): Promise<void> {
     activeBatches.push(batchRecord);
     session.active_batches = activeBatches;
     session.last_render_batch = {
-      prompt_ids: promptIds,
+      prompt_ids: promptsToSubmit.map((prompt) => prompt.id),
       aspect_ratio: aspectRatio,
       rendered_media: [],
       failed_prompts: [],
       submitted_at: submittedAt,
       captured_at: submittedAt,
     };
+    writeJson(DESCRIPTIONS_PATH, descriptionsPayload);
     writeJson(SESSION_STATE_PATH, session);
 
-    appendLog(`Streaming batch armed for prompt ids ${promptIds.join(", ")} at ${aspectRatio}. Downloads may start as soon as individual renders appear.`);
+    appendLog(`Streaming batch armed for prompt ids ${promptsToSubmit.map((prompt) => prompt.id).join(", ")} at ${aspectRatio}. Session remaining=${session.remaining_session_image_capacity}, wide_remaining=${session.remaining_16x9_capacity}, square_remaining=${session.remaining_1x1_capacity}. Downloads may start as soon as individual renders appear.`);
     if (!waitForOutcomes) {
       return;
     }
-    const firstPass = await waitForBatchOutcomes(page, promptIds, existingMedia, baselinePolicyViolations);
+    const activePromptIds = promptsToSubmit.map((prompt) => prompt.id);
+    const firstPass = await waitForBatchOutcomes(page, activePromptIds, existingMedia, baselinePolicyViolations);
     let newImages = firstPass.newImages;
     let failedPromptIds = firstPass.failedPromptIds;
 
@@ -414,7 +481,7 @@ async function main(): Promise<void> {
         appendLog(`Retry prompt ${prompt.id} submitted for ${prompt.series_slot} (${aspectRatio}).`);
       }
       const retryPass = await waitForBatchOutcomes(page, failedPromptIds, retryBaselineMedia, retryBaselinePolicyViolations);
-      newImages = [...newImages, ...retryPass.newImages].slice(0, promptIds.length);
+      newImages = [...newImages, ...retryPass.newImages].slice(0, activePromptIds.length);
       failedPromptIds = retryPass.failedPromptIds;
     }
 
@@ -428,10 +495,10 @@ async function main(): Promise<void> {
       message: "This generation might violate our policies. Please try a different prompt or send feedback.",
     }));
     session.last_render_batch = {
-      prompt_ids: promptIds,
+      prompt_ids: activePromptIds,
       aspect_ratio: aspectRatio,
       rendered_media: newImages.map((image, index) => ({
-        prompt_id: promptIds[index] ?? null,
+        prompt_id: activePromptIds[index] ?? null,
         media_name: image.mediaName,
         href: image.href,
         tile_id: image.tileId,
@@ -453,7 +520,7 @@ async function main(): Promise<void> {
     if (failedPromptIds.length) {
       appendLog(`Prompt-violation outcomes detected for prompt ids ${failedPromptIds.join(", ")} at ${aspectRatio}. Successful siblings remain valid for immediate download.`);
     }
-    appendLog(`Rendered ${newImages.length} image(s) for prompt ids ${promptIds.join(", ")} at ${aspectRatio}. Media: ${newImages.map((item) => item.mediaName).join(", ")}.`);
+    appendLog(`Rendered ${newImages.length} image(s) for prompt ids ${activePromptIds.join(", ")} at ${aspectRatio}. Media: ${newImages.map((item) => item.mediaName).join(", ")}.`);
   } finally {
     await browser.close();
   }

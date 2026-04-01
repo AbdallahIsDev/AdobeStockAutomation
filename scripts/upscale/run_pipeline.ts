@@ -218,6 +218,14 @@ function normalizeModelName(modelName: string | null | undefined): string {
   return modelName ?? "ultrasharp-4x";
 }
 
+function chunkEntries<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
 function createSidecar(sidecarPath: string, imageFile: string, source: "ai_generated" | "manual", entry: Partial<RegistryEntry>): void {
   const dims = entry.dimensions ?? null;
   const sidecar = {
@@ -574,6 +582,7 @@ function main(): void {
 
   const cli = upscalerState.cli_binary_path;
   const modelName = normalizeModelName(upscalerState.model_name);
+  const upscaleBatchSize = 16;
   if (upscalerState.method !== "cli" || !cli || !fs.existsSync(cli)) {
     appendLog("02 pipeline stopped before upscaling because the Upscayl CLI path is unavailable.");
     writeJson(IMAGE_REGISTRY_PATH, registry);
@@ -586,78 +595,82 @@ function main(): void {
       continue;
     }
     const scale = bucket === "x2" ? "2" : bucket === "x3" ? "3" : "4";
-    const inputDir = path.join(STAGING_DIR, bucket);
     ensureFolder(outputDir);
-    for (const entry of entries) {
-      const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
-      fs.copyFileSync(sourceImage, path.join(inputDir, path.basename(sourceImage)));
-    }
+    const inputDir = path.join(STAGING_DIR, bucket);
+    const entryChunks = chunkEntries(entries, upscaleBatchSize);
+    for (const [chunkIndex, entryChunk] of entryChunks.entries()) {
+      for (const stagedName of fs.readdirSync(inputDir)) {
+        if (stagedName === ".gitkeep") {
+          continue;
+        }
+        fs.rmSync(path.join(inputDir, stagedName), { recursive: true, force: true });
+      }
 
-    appendUpscalerLog(`Running CLI for ${bucket} with ${entries.length} image(s) -> ${windowsRelative(outputDir)}.`);
-    const result = spawnSync(cli, [
-      "-i", inputDir,
-      "-o", outputDir,
-      "-s", scale,
-      "-m", "..\\models",
-      "-n", modelName,
-      "-f", "png",
-    ], {
-      cwd: path.dirname(cli),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 60 * 60 * 1000,
-    });
-
-    appendUpscalerLog(result.stdout ?? "");
-    appendUpscalerLog(result.stderr ?? "");
-
-    if (result.status !== 0) {
-      appendLog(`Upscayl batch ${bucket} exited with code ${result.status ?? -1}.`);
-      appendUpscalerLog(`Upscayl batch ${bucket} exited with code ${result.status ?? -1}.`);
-      for (const entry of entries) {
+      for (const entry of entryChunk) {
         const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+        fs.copyFileSync(sourceImage, path.join(inputDir, path.basename(sourceImage)));
+      }
+
+      appendUpscalerLog(`Running CLI for ${bucket} batch ${chunkIndex + 1}/${entryChunks.length} with ${entryChunk.length} image(s) -> ${windowsRelative(outputDir)}.`);
+      const result = spawnSync(cli, [
+        "-i", inputDir,
+        "-o", outputDir,
+        "-s", scale,
+        "-m", "..\\models",
+        "-n", modelName,
+        "-f", "png",
+      ], {
+        cwd: path.dirname(cli),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 60 * 60 * 1000,
+      });
+
+      appendUpscalerLog(result.stdout ?? "");
+      appendUpscalerLog(result.stderr ?? "");
+
+      if (result.status !== 0) {
+        appendLog(`Upscayl batch ${bucket} chunk ${chunkIndex + 1}/${entryChunks.length} exited with code ${result.status ?? -1}.`);
+        appendUpscalerLog(`Upscayl batch ${bucket} chunk ${chunkIndex + 1}/${entryChunks.length} exited with code ${result.status ?? -1}.`);
+        for (const entry of entryChunk) {
+          const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+          const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
+          quarantineImage(
+            sourceImage,
+            sourceSidecar,
+            "upscale_cli_failed",
+            `${bucket}:chunk_${chunkIndex + 1}:exit_${result.status ?? -1}`,
+          );
+          entry.adobe_stock_status = "failed_moved_to_downloads_failed";
+          entry.quality_flag = "upscale_failed";
+        }
+        continue;
+      }
+
+      for (const entry of entryChunk) {
         const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
-        quarantineImage(
-          sourceImage,
-          sourceSidecar,
-          "upscale_cli_failed",
-          `${bucket}:exit_${result.status ?? -1}`,
-        );
-        entry.adobe_stock_status = "failed_moved_to_downloads_failed";
-        entry.quality_flag = "upscale_failed";
+        const outputImage = path.join(outputDir, `${path.parse(entry.final_name).name}.png`);
+        if (!fs.existsSync(outputImage)) {
+          appendLog(`Upscaled output missing for ${entry.final_name} in batch ${bucket} chunk ${chunkIndex + 1}/${entryChunks.length}.`);
+          const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+          quarantineImage(sourceImage, sourceSidecar, "upscale_output_missing", `${bucket}:chunk_${chunkIndex + 1}`);
+          entry.adobe_stock_status = "failed_moved_to_downloads_failed";
+          entry.quality_flag = "upscale_failed";
+          continue;
+        }
+        if (fs.existsSync(sourceSidecar)) {
+          const outputSidecar = path.join(outputDir, `${path.parse(outputImage).name}.metadata.json`);
+          fs.copyFileSync(sourceSidecar, outputSidecar);
+        }
+        entry.upscaled = true;
+        entry.upscaled_path = windowsRelative(outputImage);
+        entry.upscaled_dimensions = readDimensions(outputImage);
+        entry.upscaled_at = jsonTimestamp();
+        entry.adobe_stock_status = "ready_for_metadata_apply";
+        if (args.mode === "fifo") {
+          appendLog(`FIFO prepare complete for ${entry.final_name}. Output=${entry.upscaled_path}.`);
+        }
       }
-      continue;
-    }
-
-    for (const entry of entries) {
-      const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
-      const outputImage = path.join(outputDir, `${path.parse(entry.final_name).name}.png`);
-      if (!fs.existsSync(outputImage)) {
-        appendLog(`Upscaled output missing for ${entry.final_name} in batch ${bucket}.`);
-        const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
-        quarantineImage(sourceImage, sourceSidecar, "upscale_output_missing", bucket);
-        entry.adobe_stock_status = "failed_moved_to_downloads_failed";
-        entry.quality_flag = "upscale_failed";
-        continue;
-      }
-      if (fs.existsSync(sourceSidecar)) {
-        const outputSidecar = path.join(outputDir, `${path.parse(outputImage).name}.metadata.json`);
-        fs.copyFileSync(sourceSidecar, outputSidecar);
-      }
-      entry.upscaled = true;
-      entry.upscaled_path = windowsRelative(outputImage);
-      entry.upscaled_dimensions = readDimensions(outputImage);
-      entry.upscaled_at = jsonTimestamp();
-      entry.adobe_stock_status = "ready_for_metadata_apply";
-      if (args.mode === "fifo") {
-        appendLog(`FIFO prepare complete for ${entry.final_name}. Output=${entry.upscaled_path}.`);
-      }
-    }
-    for (const stagedName of fs.readdirSync(inputDir)) {
-      if (stagedName === ".gitkeep") {
-        continue;
-      }
-      fs.rmSync(path.join(inputDir, stagedName), { recursive: true, force: true });
     }
   }
 

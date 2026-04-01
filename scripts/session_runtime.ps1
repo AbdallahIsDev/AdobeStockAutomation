@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("backup", "bootstrap", "full-system", "reconcile", "stage")]
+  [ValidateSet("backup", "bootstrap", "build-descriptions", "full-system", "reconcile", "stage")]
   [string]$Action,
 
   [Parameter(Mandatory = $false)]
@@ -18,6 +18,10 @@ $sessionDir = Join-Path $PSScriptRoot "session"
 switch ($Action) {
   "backup" {
     & (Join-Path $sessionDir "backup_project_state.ps1")
+    break
+  }
+  "build-descriptions" {
+    & npx --yes tsx (Join-Path $sessionDir "build_description_inventory.ts")
     break
   }
   "bootstrap" {

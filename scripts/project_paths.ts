@@ -1,6 +1,37 @@
+import fs from "node:fs";
 import path from "node:path";
 
-export const ROOT = process.cwd();
+declare const __dirname: string | undefined;
+
+function findProjectRoot(): string {
+  const candidateStarts = [
+    typeof __dirname === "string" ? __dirname : null,
+    process.argv[1] ? path.dirname(path.resolve(process.argv[1])) : null,
+    process.cwd(),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const start of candidateStarts) {
+    let current = start;
+    while (true) {
+      if (
+        fs.existsSync(path.join(current, "SKILL.md")) &&
+        fs.existsSync(path.join(current, "instructions")) &&
+        fs.existsSync(path.join(current, "scripts"))
+      ) {
+        return current;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        break;
+      }
+      current = parent;
+    }
+  }
+
+  return process.cwd();
+}
+
+export const ROOT = findProjectRoot();
 export const INSTRUCTIONS_DIR = path.join(ROOT, "instructions");
 export const SCRIPTS_DIR = path.join(ROOT, "scripts");
 export const DATA_DIR = path.join(ROOT, "data");

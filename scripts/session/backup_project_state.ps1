@@ -10,8 +10,21 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $backupRoot = Join-Path $projectRoot "project_backups"
 $timestamp = Get-Date
-$timestampJson = $timestamp.ToString("yyyy-MM-dd__HH:mm:ss")
-$timestampFolder = $timestamp.ToString("yyyy-MM-dd__HH-mm-ss")
+
+function Format-ProjectTimestamp {
+  param(
+    [datetime]$Date,
+    [switch]$ForFolder
+  )
+
+  $timeFormat = if ($ForFolder) { "hh-mm-ss" } else { "hh:mm:ss" }
+  $timePart = $Date.ToString($timeFormat)
+  $separator = if ($ForFolder) { "_" } else { " " }
+  return "{0}__{1}{2}{3}" -f $Date.ToString("yyyy-MM-dd"), $timePart, $separator, $Date.ToString("tt")
+}
+
+$timestampJson = Format-ProjectTimestamp -Date $timestamp
+$timestampFolder = Format-ProjectTimestamp -Date $timestamp -ForFolder
 
 function Save-JsonFile {
   param(

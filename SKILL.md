@@ -68,6 +68,7 @@ If the user says "execute Adobe Stock Automation System", "run Adobe Stock Autom
 0. If this is a truly fresh project with no historical runtime state, run PROJECT_ROOT\scripts\session_runtime.ps1 -Action bootstrap once.
    If historical downloads or logs already exist and runtime JSON is missing or damaged, do not bootstrap; run PROJECT_ROOT\scripts\session_runtime.ps1 -Action reconcile instead.
    Before risky experiments or provider/model tests, create a local-state snapshot with PROJECT_ROOT\scripts\session_runtime.ps1 -Action backup.
+   After trend research, build the dynamic prompt inventory with PROJECT_ROOT\scripts\session_runtime.ps1 -Action build-descriptions.
 1. Read instructions\STOCK_SUCCESS_REPORT.md first.
    Save the full report into active memory/context before any stage work begins.
 2. For full-system runs, run PROJECT_ROOT\scripts\session_runtime.ps1 -Action full-system to initialize the session,
@@ -260,12 +261,17 @@ Rules:
 - use the exact file-defined workflow for spawned agents; do not invent new agent instructions unless the file itself requires a runtime variable like date or stage name
 - every stage must run through Planner -> Generator -> Evaluator automatically; do not wait for a user prompt to add QA
 - GitHub is the recovery path for tracked code/docs; `project_backups/` is the recovery path for local runtime state that Git does not protect
+- File 02 must build `descriptions.json` dynamically from the ranked trend list with `session_runtime.ps1 -Action build-descriptions`; it may never assume a fixed 32-prompt inventory
+- `session_runtime.ps1 -Action build-descriptions` is a session-start step only; do not rerun it after a live generation session has already started
 - File 02 must use the rolling nonblocking download path and FIFO background prepare by default; do not wait for all four images before downloading ready ones
+- File 02 must treat 64 images as a per-session cap, not a per-day cap. Starting a new session later the same day must provide a fresh 64-image budget.
+- File 02 must treat 32 wide and 32 square as the per-session aspect caps and carry extra trends into the next session instead of dropping them
 - File 02 must treat `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download` as the default fully parallel downloader and reserve `--action=download-recovery` for slower cleanup/recovery passes
 - do not block on `--wait-for-outcomes` between prompt groups; the next group can be queued while the downloader harvests the newest rendered images from already-running groups
 - File 02 must treat the run as an active session window: ignore all images that existed before the run baseline and only download renders created after that baseline
 - File 02 must not let one failed render block its successful siblings; retry failed prompts through the runtime and keep the rest of the pipeline moving
 - `instructions\03_IMAGE_UPSCALER.md` must generate full metadata for manual images before upscale
+- `instructions\03_IMAGE_UPSCALER.md` batch mode must process pending session work in 16-image chunks
 - `instructions\04_METADATA_OPTIMIZER.md` should apply sidecars for all pipeline images and only use visual rebuild for outside-system Adobe uploads
 - log and stop if a required file path is missing or a stage verification fails
 - log spawn events and completion signals to `PROJECT_ROOT\logs\automation.log`

@@ -6,6 +6,12 @@ $downloadsDir = Join-Path $projectRoot "downloads"
 $logsDir = Join-Path $projectRoot "logs"
 $backupScript = Join-Path $PSScriptRoot "backup_project_state.ps1"
 
+function Format-ProjectTimestamp {
+  param([datetime]$Date)
+
+  return "{0}__{1} {2}" -f $Date.ToString("yyyy-MM-dd"), $Date.ToString("hh:mm:ss"), $Date.ToString("tt")
+}
+
 function Convert-ToPlainObject {
   param([Parameter(ValueFromPipeline = $true)]$InputObject)
 
@@ -107,9 +113,9 @@ function Test-HistoricalProjectState {
 }
 
 $now = Get-Date
-$nowJson = $now.ToString("yyyy-MM-dd__HH:mm:ss")
+$nowJson = Format-ProjectTimestamp -Date $now
 $today = $now.ToString("yyyy-MM-dd")
-$validUntilJson = $now.AddHours(4).ToString("yyyy-MM-dd__HH:mm:ss")
+$validUntilJson = Format-ProjectTimestamp -Date $now.AddHours(4)
 
 New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
 
@@ -141,6 +147,9 @@ Ensure-JsonFile -Path (Join-Path $dataDir "session_state.json") -Defaults ([orde
   session_started_at = $nowJson
   pipeline_mode = "stage_only"
   post_download_policy = "fifo_upscale_prepare"
+  session_image_cap = 64
+  session_aspect_cap = 32
+  session_upscale_batch_size = 16
   current_stage = $null
   last_completed_stage = $null
   current_account_index = 0
@@ -156,12 +165,19 @@ Ensure-JsonFile -Path (Join-Path $dataDir "session_state.json") -Defaults ([orde
   current_series_slot = $null
   run_baseline_media_names = @()
   active_batches = @()
+  queued_trend_ids = @()
+  deferred_trend_ids = @()
+  remaining_session_image_capacity = 64
+  remaining_16x9_capacity = 32
+  remaining_1x1_capacity = 32
   static_cache_status = "missing"
   static_cache_age_days = $null
   dynamic_cache_status = "missing"
   dynamic_cache_valid_until = $null
   descriptions_queue = @()
   images_created_count = 0
+  images_created_16x9_count = 0
+  images_created_1x1_count = 0
   images_downloaded_count = 0
   downloads_completed = 0
   upscale_requested_ids = @()
