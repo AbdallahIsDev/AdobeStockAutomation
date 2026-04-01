@@ -3,6 +3,8 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { quarantineFailedAsset } from "../common/failed_assets";
 import { compactDateStamp, dateFolderName, jsonTimestamp } from "../common/time";
+import { appendAutomationLog } from "../common/logging";
+import { embedXmpMetadata } from "../embed_metadata";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -32,6 +34,9 @@ type RegistryEntry = {
   registered_at: string;
   upscaled_at: string | null;
   adobe_stock_status: string;
+  xmp_embed_status?: string | null;
+  xmp_embedded_at?: string | null;
+  xmp_embed_detail?: string | null;
   quality_flag?: string;
   trend_topic?: string | null;
   series_slot?: string | null;
@@ -112,13 +117,11 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  fs.mkdirSync(path.dirname(AUTOMATION_LOG_PATH), { recursive: true });
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
+  appendAutomationLog(message);
 }
 
 function appendUpscalerLog(message: string): void {
-  fs.mkdirSync(path.dirname(UPSCALER_LOG_PATH), { recursive: true });
-  fs.appendFileSync(UPSCALER_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
+  appendAutomationLog(message);
 }
 
 function windowsRelative(filePath: string): string {
@@ -255,8 +258,8 @@ function createSidecar(sidecarPath: string, imageFile: string, source: "ai_gener
       commercial_use_cases: [],
       visual_keywords_from_trend: [],
     },
-    metadata_generation_mode: source === "manual" ? "auto_from_visual_analysis_in_file_03" : "verify_existing_metadata",
-    status: source === "manual" ? "analysis_required_before_upscale" : "stub_created_pending_review",
+    metadata_generation_mode: source === "manual" ? "auto_from_visual_analysis_in_file_03" : "prompt_context_rebuild_required",
+    status: source === "manual" ? "analysis_required_before_upscale" : "metadata_rebuild_required",
     applied_to_adobe_stock: false,
   };
   writeJson(sidecarPath, sidecar);
@@ -453,6 +456,9 @@ function main(): void {
       registered_at: existing?.registered_at ?? jsonTimestamp(),
       upscaled_at: existing?.upscaled_at ?? null,
       adobe_stock_status: existing?.adobe_stock_status ?? "not_uploaded",
+      xmp_embed_status: existing?.xmp_embed_status ?? null,
+      xmp_embedded_at: existing?.xmp_embedded_at ?? null,
+      xmp_embed_detail: existing?.xmp_embed_detail ?? null,
       quality_flag: scale === "low_res" ? "review_before_upload" : existing?.quality_flag,
       trend_topic: existing?.trend_topic ?? null,
       series_slot: existing?.series_slot ?? null,
@@ -515,6 +521,28 @@ function main(): void {
     bucketGroups.set(key, current);
   }
 
+  function finalizeOutput(entry: RegistryEntry, outputImage: string, outputSidecar: string | null): void {
+    const xmpResult = embedXmpMetadata(outputImage, outputSidecar);
+    entry.upscaled = true;
+    entry.upscaled_path = windowsRelative(outputImage);
+    entry.upscaled_dimensions = readDimensions(outputImage);
+    entry.upscaled_at = jsonTimestamp();
+    entry.adobe_stock_status = "ready_for_metadata_apply";
+    entry.xmp_embed_status = xmpResult.status;
+    entry.xmp_embedded_at = xmpResult.embeddedAt;
+    entry.xmp_embed_detail = xmpResult.detail;
+
+    if (xmpResult.status === "embedded") {
+      appendLog(`XMP embedded for ${entry.final_name} before Adobe upload.`);
+    } else {
+      appendLog(`XMP embed ${xmpResult.status} for ${entry.final_name}: ${xmpResult.detail}`);
+    }
+
+    if (args.mode === "fifo") {
+      appendLog(`FIFO prepare complete for ${entry.final_name}. Output=${entry.upscaled_path}.`);
+    }
+  }
+
   for (const entry of Object.values(registry.images)) {
     const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
     if (requestedImage && normalizedAbsolute(sourceImage) !== requestedImage) {
@@ -565,18 +593,10 @@ function main(): void {
     }
     ensureFolder(outputDir);
     for (const entry of entries) {
-    const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
-    const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
+      const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
+      const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
       const copied = copyWithSidecar(sourceImage, sourceSidecar, outputDir);
-    const dims = readDimensions(copied.imagePath);
-    entry.upscaled = true;
-    entry.upscaled_path = windowsRelative(copied.imagePath);
-    entry.upscaled_dimensions = dims;
-    entry.upscaled_at = jsonTimestamp();
-    entry.adobe_stock_status = "ready_for_metadata_apply";
-    if (args.mode === "fifo") {
-        appendLog(`FIFO prepare complete for ${entry.final_name}. Output=${entry.upscaled_path}.`);
-      }
+      finalizeOutput(entry, copied.imagePath, copied.sidecarPath);
     }
   }
 
@@ -658,18 +678,12 @@ function main(): void {
           entry.quality_flag = "upscale_failed";
           continue;
         }
+        let outputSidecar: string | null = null;
         if (fs.existsSync(sourceSidecar)) {
-          const outputSidecar = path.join(outputDir, `${path.parse(outputImage).name}.metadata.json`);
+          outputSidecar = path.join(outputDir, `${path.parse(outputImage).name}.metadata.json`);
           fs.copyFileSync(sourceSidecar, outputSidecar);
         }
-        entry.upscaled = true;
-        entry.upscaled_path = windowsRelative(outputImage);
-        entry.upscaled_dimensions = readDimensions(outputImage);
-        entry.upscaled_at = jsonTimestamp();
-        entry.adobe_stock_status = "ready_for_metadata_apply";
-        if (args.mode === "fifo") {
-          appendLog(`FIFO prepare complete for ${entry.final_name}. Output=${entry.upscaled_path}.`);
-        }
+        finalizeOutput(entry, outputImage, outputSidecar);
       }
     }
   }

@@ -112,11 +112,11 @@ Spawn the next stage only after the current stage has signaled success and that 
 3. Image Upscaler
    Command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action batch
    File: instructions\03_IMAGE_UPSCALER.md
-   Verify before continuing: upscaled images exist in downloads\upscaled\[date]\ and data\image_registry.json reflects the upscale state.
+   Verify before continuing: upscaled images exist in downloads\upscaled\[date]\, matching sidecars exist, and XMP embed status is recorded for each final image before Adobe upload.
 
 4. Metadata Optimizer
    File: instructions\04_METADATA_OPTIMIZER.md
-   Verify completion: Adobe Stock items have metadata applied and the action is logged.
+   Verify completion: Adobe Stock items show XMP-prefilled title/keywords, Adobe-only finish fields are applied, and the action is logged.
 ```
 
 ## Strict Sub-Agent Contract
@@ -225,12 +225,12 @@ For full-system runs, the orchestrator should think in this exact pattern:
    Assigned file: instructions\03_IMAGE_UPSCALER.md
    Session command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action batch
    Internal workflow: Planner -> Generator -> Evaluator
-   Completion check: downloads\upscaled\[date]\ is populated and data\image_registry.json reflects the upscale state
+   Completion check: downloads\upscaled\[date]\ is populated, each final image has a matching sidecar, and XMP embed status is recorded in sidecar/registry state
 
 4. Spawn Metadata Optimizer Agent
    Assigned file: instructions\04_METADATA_OPTIMIZER.md
    Internal workflow: Planner -> Generator -> Evaluator
-   Completion check: Adobe Stock items have metadata applied and the action is logged
+   Completion check: Adobe Stock items have their Adobe-only finish fields applied, any weak prefilled metadata is corrected, and the action is logged
 ```
 
 Do not spawn the next stage until the current stage has signaled success and that success has been verified against the expected project files.

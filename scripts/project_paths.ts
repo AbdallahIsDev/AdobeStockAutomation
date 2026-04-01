@@ -34,7 +34,10 @@ function findProjectRoot(): string {
 export const ROOT = findProjectRoot();
 export const INSTRUCTIONS_DIR = path.join(ROOT, "instructions");
 export const SCRIPTS_DIR = path.join(ROOT, "scripts");
+export const ADOBE_SCRIPTS_DIR = path.join(SCRIPTS_DIR, "adobe");
 export const DATA_DIR = path.join(ROOT, "data");
+export const ADOBE_OUTSIDE_SYSTEM_DIR = path.join(DATA_DIR, "adobe_outside_system");
+export const REPORTS_DIR = path.join(DATA_DIR, "reports");
 export const DOWNLOADS_DIR = path.join(ROOT, "downloads");
 export const FAILED_DOWNLOADS_DIR = path.join(DOWNLOADS_DIR, "failed");
 export const STAGING_DIR = path.join(ROOT, "staging");
@@ -61,3 +64,4 @@ export const DESCRIPTIONS_PATH = path.join(DATA_DIR, "descriptions.json");
 export const TREND_DATA_PATH = path.join(DATA_DIR, "trend_data.json");
 export const SELECTORS_REGISTRY_PATH = path.join(DATA_DIR, "selectors_registry.json");
 export const ADOBE_STOCK_SELECTORS_PATH = path.join(DATA_DIR, "adobe_stock_selectors.json");
+export const ADOBE_RUNTIME_PATH = path.join(SCRIPTS_DIR, "adobe_runtime.ts");

@@ -1,6 +1,14 @@
 # Adobe Stock Automation
 
-This project is a four-stage Adobe Stock production pipeline built around trend research, Google Flow image generation, Upscayl-based upscaling, and Adobe Stock metadata application.
+This project is a four-stage Adobe Stock production pipeline built around trend research, Google Flow image generation, Upscayl-based upscaling, pre-upload XMP embedding, and Adobe Stock metadata application.
+
+Metadata rule:
+
+- never generate Adobe metadata from the downloaded filename alone
+- AI image sidecars must come from prompt + trend context at download time
+- manual images must stay blocked until visual analysis generates their metadata
+- File 04 always starts with a check pass before any Adobe write
+- Adobe-stage fallback may check, add, edit, replace, erase, or improve weak metadata for outside-system uploads
 
 ## State Protection
 
@@ -14,8 +22,8 @@ This project is a four-stage Adobe Stock production pipeline built around trend 
 
 1. Researches commercially promising stock trends and ranks them for execution.
 2. Generates and downloads image series from Google Flow with sidecar metadata for every successful image.
-3. Normalizes, registers, and upscales downloaded images to a 4K-ready output set, with FIFO post-download prepare as the default and 16-image batch chunks for standalone upscale runs.
-4. Applies the prepared metadata to Adobe Stock upload items so the final review can be done quickly.
+3. Normalizes, registers, upscales, and embeds XMP metadata into the final image before upload, with FIFO post-download prepare as the default and 16-image batch chunks for standalone upscale runs.
+4. Verifies the prefilled Adobe metadata, then applies only the Adobe-only finish fields or any truly mismatched fields so the final review can be done quickly.
 
 ## Main Workflow
 
@@ -24,13 +32,13 @@ This project is a four-stage Adobe Stock production pipeline built around trend 
 - `instructions/01_TREND_RESEARCH.md`
   Runs the orchestrator boot, static cache check, dynamic research, and trend scoring.
 - `instructions/02_IMAGE_CREATION.md`
-  Builds the 8-slot prompt series, drives Google Flow, downloads renders, and writes `.metadata.json` sidecars.
+  Builds the 8-slot prompt series, drives Google Flow, downloads renders, and writes prompt-context `.metadata.json` sidecars for AI images.
 - `instructions/03_IMAGE_UPSCALER.md`
-  Scans all downloaded images, generates full metadata for manual images during the scan phase, updates `image_registry.json`, and upscales images with Upscayl.
+  Scans all downloaded images, generates full metadata for manual images during the scan phase, updates `image_registry.json`, upscales images with Upscayl, and embeds XMP metadata into the final files before upload.
 - `instructions/04_METADATA_OPTIMIZER.md`
-  Loads sidecar metadata and applies it to Adobe Stock upload rows, with a fallback rebuild path only for outside-system uploads.
+  Verifies the XMP-prefilled Adobe fields, applies Adobe-only finish fields, and only rewrites title/keywords when the current item is truly weak or mismatched.
 - `instructions/STOCK_SUCCESS_REPORT.md`
-  Strategic commercial reference used by the execution files through targeted chapter reads.
+  Strategic commercial reference that must be loaded into memory before the stage files run.
 
 ## Folder Structure
 
@@ -50,10 +58,14 @@ PROJECT_ROOT\
 │   ├── flow_runtime.ts                 ← Public Flow runtime entrypoint
 │   ├── session_runtime.ps1             ← Public session/bootstrap entrypoint
 │   ├── upscale_runtime.ps1             ← Public upscale entrypoint
-│   ├── process_adobe_page.ps1
+│   ├── adobe_runtime.ts                ← Public Adobe metadata/runtime entrypoint
+│   ├── embed_metadata.ts               ← Public XMP embed helper used after upscale
 │   ├── project_paths.ts
 │   ├── common\                         ← Shared runtime helpers
-│   │   └── failed_assets.ts
+│   │   ├── ai_metadata.ts
+│   │   ├── failed_assets.ts
+│   │   ├── logging.ts
+│   │   └── time.ts
 │   ├── flow\                           ← Internal Flow workers
 │   │   ├── flow_batch_submit_worker.ts
 │   │   ├── flow_download_worker.ts
@@ -69,6 +81,13 @@ PROJECT_ROOT\
 │   └── upscale\                        ← Internal upscale workers
 │       ├── reconcile_data_and_sidecars.ts
 │       └── run_pipeline.ts
+│   └── adobe\                          ← Internal Adobe helpers
+│       ├── adobe_stock_uia.ps1
+│       ├── apply_metadata.ts
+│       ├── process_adobe_page.ps1
+│       ├── probe_uploads.ts
+│       ├── repair_sidecars.ts
+│       └── selector_cache.ts
 │
 ├── downloads\                          ← Source images and final prepared outputs
 │   ├── [YYYY-MM-DD]\                   ← AI-generated images + `.metadata.json` sidecars
@@ -85,9 +104,11 @@ PROJECT_ROOT\
 ├── data\                               ← Runtime state, registries, and caches
 │   ├── accounts.json
 │   ├── adobe_stock_selectors.json
+│   ├── adobe_outside_system\          ← Sidecars captured from Adobe-only uploads
 │   ├── descriptions.json
 │   ├── dynamic_trend_cache.json
 │   ├── image_registry.json
+│   ├── reports\                       ← Machine-readable JSON reports and probes
 │   ├── selectors_registry.json
 │   ├── session_state.json
 │   ├── static_knowledge_cache.json
@@ -95,7 +116,7 @@ PROJECT_ROOT\
 │   └── upscaler_state.json
 │
 ├── logs\
-│   ├── automation.log                  ← Shared runtime + Upscayl log
+│   ├── automation.log                  ← Shared runtime + Upscayl text log with severity tags
 │   └── screenshots\                    ← Targeted browser evidence captures
 │
 ├── project_backups\                    ← Local-state snapshots for gitignored runtime folders
@@ -131,13 +152,13 @@ PROJECT_ROOT\
 - `scripts/upscale/`
   Internal upscale/reconcile implementations grouped behind `scripts/upscale_runtime.ps1`.
 - `data/`
-  Runtime JSON state, registries, selector caches, and session handoff files.
+  Runtime JSON state, registries, selector caches, session handoff files, and machine-readable report JSON.
 - `downloads/`
   Source images, manual imports, failed-asset quarantine, and final upscaled exports.
 - `staging/`
   Temporary upscale buckets used by the cleaned 02 pipeline.
 - `logs/`
-  Shared runtime log for automation and Upscayl output, plus screenshot evidence when needed.
+  Shared runtime text log for automation and Upscayl output, plus screenshot evidence when needed.
 - `project_backups/`
   Local snapshots focused on gitignored runtime state that GitHub cannot restore for you.
 
@@ -171,6 +192,12 @@ Browser automation depends on:
 
 This provides the shared launcher, browser connection helpers, and selector-cache pattern used by the Flow and Adobe Stock steps.
 
+XMP embedding depends on:
+
+`ExifTool`
+
+If ExifTool is installed outside PATH, set `data\upscaler_state.json -> exiftool_path`.
+
 ## Operational Rules
 
 - Every downloaded image must have exactly one matching `.metadata.json` sidecar.
@@ -181,17 +208,29 @@ This provides the shared launcher, browser connection helpers, and selector-cach
 - That 64-image limit is per session, not per day. Starting a new session later the same day should give a fresh 64-image budget.
 - File 02 tracks one active session run baseline so old Flow project images stay ignored even when multiple new batches are in flight.
 - File 02 must retry failed prompts instead of leaving successful sibling renders blocked behind incomplete batches.
-- File 02 uses FIFO post-download prepare by default: download -> sidecar -> queue upscale -> continue immediately.
+- File 02 uses FIFO post-download prepare by default: download -> prompt-context sidecar -> queue upscale -> continue immediately.
+- File 02 must never derive AI metadata from the downloaded filename or suggested filename.
+- File 03 may create a missing AI sidecar shell only as a rebuild marker; it must not invent final metadata from the filename.
 - File 02 builds `descriptions.json` dynamically from the actual ranked trend list; it must never assume a fixed total like 32 prompts.
 - File 02 queues at most 8 trends per session and stores overflow trends as carry-forward work for the next session.
 - `npx --yes tsx scripts/flow_runtime.ts --action=download` is the default fully parallel downloader; `--action=download-recovery` is the slower recovery-only sweep.
 - `npx --yes tsx scripts/flow_runtime.ts --action=recover-failures` is the scripted repair path for visible Flow failed tiles that escaped normal batch-state handling.
 - File 03 batch upscale is a sync/catch-up pass only for images not already marked `upscaled = true`.
 - File 03 batch upscale runs in 16-image chunks so a full 64-image session resolves in four clean upscale batches.
+- File 03 embeds XMP title, keywords, and description into every final upscaled image before upload.
+- If ExifTool is not installed yet, File 03 records `xmp_embed_status = pending_exiftool_install` instead of pretending the embed succeeded.
 - File 03 writes outputs into `downloads/upscaled/[source_download_date]`, so the upscaled folder matches the image's real source date.
 - Batch upscale remains available as a standalone recovery/cleanup path when explicitly invoked.
 - File 03 prefers `2K` downloads from Flow and only falls back to `1X` after two failed `2K` attempts for the same image.
 - File 03 must reconcile manual images dropped into `downloads/manual/`, generate their full metadata, and only then upscale them.
+- File 04 is a check-first finish stage: pipeline images should already arrive with title and keywords prefilled from embedded XMP.
+- File 04 is still an editor for outside-system uploads: it may add, replace, erase, and improve Adobe fields when the current metadata is weak.
+- File 04 has a real check phase: it audits the current Adobe fields first, then writes only the fields that are weak or mismatched.
+- `npx --yes tsx scripts/adobe_runtime.ts --action=check --date=YYYY-MM-DD` runs a non-destructive Adobe audit pass.
+- `npx --yes tsx scripts/adobe_runtime.ts --action=apply --date=YYYY-MM-DD` runs the normal check-then-update pass.
+- Machine-readable JSON reports belong in `data\reports\`, not in `logs\`.
+- `logs\automation.log` uses severity tags like `[ERROR]`, `[WARN]`, and `[SUCCESS]` instead of embedded color codes, because plain text colors are not reliable across editors.
+- `logs\automation.log` automatically prunes lines older than 3 days whenever active runtime scripts append new entries.
 - Failed-asset `.failure.json` files are auto-created by the Flow and Upscale runtime commands; they are not written manually in the markdown instructions.
 - `bootstrap` is only for a truly fresh project with no historical runtime state; if `data/` is missing but `downloads/` or `logs/` already exist, use `session_runtime.ps1 -Action reconcile` instead of recreating empty JSON.
 

@@ -4,7 +4,9 @@ import { spawn } from "node:child_process";
 import type { Download, Page } from "playwright";
 import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
 import { AUTOMATION_LOG_PATH, DATA_DIR, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
+import { buildAiMetadataContext } from "../common/ai_metadata";
 import { dateFolderName, jsonTimestamp } from "../common/time";
+import { appendAutomationLog } from "../common/logging";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -31,12 +33,24 @@ type SessionState = {
   downloaded_images?: DownloadedImage[];
   run_baseline_media_names?: string[];
   errors?: string[];
+  active_batches?: Array<{
+    prompt_ids?: number[];
+    aspect_ratio?: string;
+    rendered_media?: Array<{
+      prompt_id?: number | null;
+      media_name?: string;
+      href?: string | null;
+      tile_id?: string | null;
+    }>;
+  }>;
   current_16x9_rendered?: string[];
   current_1x1_rendered?: string[];
+  current_model?: string;
   last_render_batch?: {
     prompt_ids?: number[];
     aspect_ratio?: string;
     rendered_media?: Array<{
+      prompt_id?: number | null;
       media_name?: string;
       href?: string | null;
       tile_id?: string | null;
@@ -101,7 +115,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
+  appendAutomationLog(message);
 }
 
 function sanitizeFileStem(value: string): string {
@@ -301,14 +315,48 @@ function queueFifoPrepare(savedPath: string): void {
   ).unref();
 }
 
+function resolvePromptId(session: SessionState, mediaName: string): number | null {
+  for (const batch of session.active_batches ?? []) {
+    for (const item of batch.rendered_media ?? []) {
+      if (item?.media_name === mediaName && typeof item.prompt_id === "number") {
+        return item.prompt_id;
+      }
+    }
+  }
+  for (const item of session.last_render_batch?.rendered_media ?? []) {
+    if (item?.media_name === mediaName && typeof item.prompt_id === "number") {
+      return item.prompt_id;
+    }
+  }
+  return null;
+}
+
+function writeAiSidecarIfPossible(session: SessionState, image: GeneratedImage, savedPath: string, downloadedAt: string): void {
+  const promptId = resolvePromptId(session, image.mediaName);
+  if (promptId == null) {
+    appendLog(`AI sidecar deferred for ${image.mediaName}: prompt_id not found in session batch state.`);
+    return;
+  }
+  const payload = buildAiMetadataContext({
+    imagePath: savedPath,
+    mediaName: image.mediaName,
+    promptId,
+    downloadedAt,
+    modelUsed: session.current_model ?? "Nano Banana 2 / Flow",
+  });
+  const sidecarPath = path.join(path.dirname(savedPath), `${path.parse(savedPath).name}.metadata.json`);
+  writeJson(sidecarPath, payload);
+}
+
 function markDownloaded(session: SessionState, image: GeneratedImage, saved: SavedDownload, note: string): void {
   const downloaded = Array.isArray(session.downloaded_images) ? session.downloaded_images : [];
+  const downloadedAt = jsonTimestamp();
   downloaded.push({
     media_name: image.mediaName,
     saved_path: saved.savedPath,
     suggested_filename: saved.suggestedFilename,
     download_attempt: saved.attempt,
-    downloaded_at: jsonTimestamp(),
+    downloaded_at: downloadedAt,
     download_mode: saved.mode,
     note,
     href: image.href,
@@ -317,6 +365,7 @@ function markDownloaded(session: SessionState, image: GeneratedImage, saved: Sav
   });
   session.downloaded_images = downloaded;
   session.images_downloaded_count = downloaded.length;
+  writeAiSidecarIfPossible(session, image, saved.savedPath, downloadedAt);
   if (shouldQueueFifoPrepare(session)) {
     queueFifoPrepare(saved.savedPath);
     appendLog(`Queued FIFO prepare for ${image.mediaName} -> ${saved.savedPath}`);

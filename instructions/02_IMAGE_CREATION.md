@@ -16,6 +16,8 @@ This file owns:
 - rate-limit handling
 - account switching
 - metadata sidecar creation
+- strict AI sidecar generation from prompt + trend context only
+- handoff metadata source for File 03 XMP embedding
 
 ---
 
@@ -428,11 +430,25 @@ Minimum sidecar contract:
 
 Rules:
 
-- create metadata from the known generation context, not from visual analysis
+- never create AI metadata from the downloaded filename, Flow suggested filename, or renamed output stem
+- create AI metadata from the known generation context: prompt, trend topic, trend category, commercial tags, and success-report rules
+- preserve prompt detail in the sidecar, including composition and object cues such as:
+  - top view / overhead / bird's-eye / flat-lay
+  - close-up / macro / portrait / wide shot
+  - hand holding / card / tablet / screen / receipt / eye / server racks
+- if the prompt-to-image relationship is unclear, mark the sidecar for visual validation; do not invent filename-based metadata
 - keep titles under 70 characters
 - follow the 35-keyword blueprint from the success report
+- target 25-35 strong keywords; anything under 20 is too weak and must be rebuilt before File 04 trusts it
 - choose the best Adobe Stock category now, not later
 - sidecar and image must always travel together
+- this sidecar is the source of truth for File 03's XMP embed step; it is not just a later File 04 reference
+
+Strict prohibition:
+
+- the downloaded filename is only a transport identifier
+- it must never be treated as the semantic source for title, keywords, or category
+- if prompt context is missing, write a rebuild-required sidecar and stop the metadata draft path for that image until the context is restored
 
 ---
 

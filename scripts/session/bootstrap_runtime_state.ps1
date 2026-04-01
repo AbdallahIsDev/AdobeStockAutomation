@@ -260,6 +260,8 @@ Ensure-JsonFile -Path (Join-Path $dataDir "upscaler_state.json") -Defaults ([ord
   models_dir = $null
   model_name = "ultrasharp-4x"
   method = $null
+  exiftool_path = $null
+  embed_xmp_after_upscale = $true
 })
 
 Ensure-JsonFile -Path (Join-Path $dataDir "adobe_stock_selectors.json") -Defaults ([ordered]@{

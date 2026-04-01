@@ -5,7 +5,7 @@
 
 ## PURPOSE
 
-Normalize every image in `downloads\`, keep the registry accurate, generate full metadata for manual images during the scan phase, and upscale everything possible to a 4K-ready output set.
+Normalize every image in `downloads\`, keep the registry accurate, generate full metadata for manual images during the scan phase, upscale everything possible to a 4K-ready output set, and embed XMP metadata into the final image before upload.
 
 This file supports two execution modes:
 
@@ -40,6 +40,7 @@ PROJECT_ROOT\downloads\
 PROJECT_ROOT\staging\
 PROJECT_ROOT\logs\automation.log
 C:\Program Files\Upscayl\resources\bin\upscayl-bin.exe
+ExifTool (PATH or configured in `PROJECT_ROOT\data\upscaler_state.json -> exiftool_path`)
 ```
 
 Write Upscayl CLI/app output into the shared `PROJECT_ROOT\logs\automation.log` file.
@@ -50,6 +51,14 @@ Command-first entry:
 Stage-only batch run: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action batch
 FIFO one-image run:   powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action fifo -ImagePath "[saved_path]"
 ```
+
+XMP helper:
+
+```text
+npx --yes tsx PROJECT_ROOT\scripts\embed_metadata.ts --image="PROJECT_ROOT\downloads\upscaled\[date]\file.png"
+```
+
+File 03 normally calls this automatically after each final output is confirmed.
 
 ---
 
@@ -99,9 +108,9 @@ If true parallel agents are unavailable, preserve the same Planner -> Generator 
 ### AI-generated images
 
 - arrive from `02_IMAGE_CREATION.md`
-- already named correctly and have `.metadata.json` sidecars
+- already named correctly and should already have prompt-context `.metadata.json` sidecars
 - usually need 2x upscale (long side ~2752px)
-- if AI sidecar is missing: create a minimal stub immediately and log a warning — do not skip the image
+- if AI sidecar is missing: create only a rebuild marker and regenerate from prompt/trend context; do not derive final metadata from the filename
 
 ### Manual images
 
@@ -116,7 +125,7 @@ If true parallel agents are unavailable, preserve the same Planner -> Generator 
 
 ```text
 AI-generated: [topic]_[slot]_L[N]_[seq]_[date].ext
-              example: ai_finance_16A_establishing_L1_001_20260323.png
+              example: ai_finance_-16A_establishing_L1_001_20260323.png
 
 Manual:       manual_[slug]_M[seq]_[date].ext
               example: manual_sunset_beach_M001_20260323.jpg
@@ -133,10 +142,11 @@ Before any upscale work:
 1. load or create `image_registry.json`
 2. scan `downloads\` recursively; exclude `downloads\upscaled\`, `downloads\failed\`, `staging\`, and non-image files
 3. for each image not in registry: register it and ensure exactly one `.metadata.json` sidecar exists
-4. if AI image sidecar is missing: create a minimal bootstrap sidecar (mark `source: ai_generated`) and log a warning
+4. if AI image sidecar is missing: create only a rebuild-required shell (mark `source: ai_generated`) and log a warning
 5. if a manual image has no sidecar: generate the full sidecar now during File 03 before upscale
 6. log orphan sidecars (sidecars with no matching image) for manual review
 7. do not proceed to upscaling until every image has exactly one sidecar
+8. after copy-only or upscale output is confirmed, embed XMP title + keywords + description into the final image file before upload
 
 Batch scope rule:
 
@@ -144,6 +154,7 @@ Batch scope rule:
 - if an image is not in the active session batch, do not upscale it in `batch` mode
 - if a registry entry already has `upscaled = true` and a valid `upscaled_path`, skip it in `batch` mode
 - `batch` mode is a sync/catch-up pass for downloaded images that are still pending upscale; it must never re-upscale assets that were already completed
+- after the final output exists, File 03 must record `xmp_embed_status`, `xmp_embedded_at`, and any embed error detail in runtime state
 
 Failure quarantine rule:
 
@@ -177,9 +188,39 @@ Registry fields to maintain per entry:
   "upscaled": false,
   "upscaled_path": null,
   "upscaled_dimensions": null,
-  "adobe_stock_status": "not_uploaded"
+  "adobe_stock_status": "not_uploaded",
+  "xmp_embed_status": null,
+  "xmp_embedded_at": null,
+  "xmp_embed_detail": null
 }
 ```
+
+---
+
+## POST-UPSCALE XMP EMBED
+
+After each final output file is ready in `downloads\upscaled\[date]\`:
+
+1. load the matching `.metadata.json` sidecar from the same folder
+2. read:
+   - `adobe_stock_metadata.title`
+   - `adobe_stock_metadata.keywords`
+   - optional description context from `generation_context.prompt_used`
+3. call ExifTool to write XMP into the image file before upload
+4. record the embed result in the sidecar and registry
+
+Fields to embed:
+
+- `XMP-dc:Title`
+- `XMP-dc:Subject` (keywords array)
+- `XMP-dc:Description`
+
+If ExifTool is unavailable:
+
+- do not fake success
+- set `xmp_embed_status = pending_exiftool_install`
+- log a warning
+- leave the image otherwise ready so File 04 can still act as fallback if needed
 
 ---
 
@@ -201,11 +242,11 @@ Assign upscale groups by `long_side`:
 
 ## MANUAL IMAGE METADATA GENERATION
 
-When a manual image is registered, **generate its complete metadata immediately** from visual analysis. Do not create a stub and defer this to File 04. By the time any image reaches File 04, it must already have a complete sidecar ready to apply — this keeps File 04 as a simple applier for all images without exception.
+When a manual image is registered, **generate its complete metadata immediately** from visual analysis. Do not create a stub and defer this to File 04. By the time any image reaches File 04, it must already have a complete sidecar ready to apply — this keeps File 04 as a simple applier for pipeline images and an editor for outside-system exceptions only.
 
 ### When to run
 
-Run for every manual image during the registry scan. Also run for any AI-generated image whose sidecar is missing (same output format, mark `source: ai_generated`).
+Run for every manual image during the registry scan. For AI-generated images whose sidecar is missing, rebuild from prompt/trend context first; never use the filename as the metadata source.
 
 ### How to analyze the image
 

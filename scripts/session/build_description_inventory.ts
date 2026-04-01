@@ -8,6 +8,7 @@ import {
   TREND_DATA_PATH,
 } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
+import { appendAutomationLog } from "../common/logging";
 
 type Trend = {
   id: number;
@@ -123,8 +124,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  fs.mkdirSync(path.dirname(AUTOMATION_LOG_PATH), { recursive: true });
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
+  appendAutomationLog(message);
 }
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {

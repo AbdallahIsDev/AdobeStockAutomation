@@ -10,6 +10,8 @@ import {
   waitForElement,
 } from "../../../../../browser-automation-core/browser_core";
 import { quarantineFailedAsset } from "../common/failed_assets";
+import { buildAiMetadataContext } from "../common/ai_metadata";
+import { appendAutomationLog } from "../common/logging";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -30,6 +32,7 @@ type SessionState = {
   pipeline_mode?: string;
   post_download_policy?: string;
   loop_index?: number;
+  current_model?: string;
   current_step?: string;
   images_downloaded_count?: number;
   downloaded_images?: Json[];
@@ -52,6 +55,7 @@ type SessionState = {
     prompt_ids?: number[];
     aspect_ratio?: string;
     rendered_media?: Array<{
+      prompt_id?: number | null;
       media_name?: string;
       href?: string | null;
       tile_id?: string | null;
@@ -136,8 +140,7 @@ function writeJsonFile(filePath: string, value: unknown): void {
 }
 
 function appendLog(line: string): void {
-  fs.mkdirSync(LOGS_DIR, { recursive: true });
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${line}\n`, "utf8");
+  appendAutomationLog(line.replace(/^\d{4}-\d{2}-\d{2}__\d{2}:\d{2}:\d{2}(?: [AP]M)?\s+/, ""));
 }
 
 function timestampIso(): string {
@@ -538,6 +541,7 @@ async function performDownloadAttempt(
 
 function markDownloaded(session: SessionState, image: GeneratedImage, result: Extract<DownloadAttemptResult, { ok: true }>, note: string | null): void {
   const downloaded = Array.isArray(session.downloaded_images) ? session.downloaded_images : [];
+  const downloadedAt = timestampIso();
   downloaded.push({
     media_name: image.mediaName,
     tile_id: image.tileId,
@@ -547,11 +551,12 @@ function markDownloaded(session: SessionState, image: GeneratedImage, result: Ex
     saved_path: result.savedPath,
     suggested_filename: result.suggestedFilename,
     download_attempt: result.attempt,
-    downloaded_at: timestampIso(),
+    downloaded_at: downloadedAt,
     note,
   });
   session.downloaded_images = downloaded;
   session.images_downloaded_count = downloaded.length;
+  writeAiSidecarIfPossible(session, image.mediaName, result.savedPath, downloadedAt);
   if (session.post_download_policy === "fifo_upscale_prepare") {
     spawn(
       "powershell",
@@ -573,6 +578,31 @@ function markDownloaded(session: SessionState, image: GeneratedImage, result: Ex
     ).unref();
     appendLog(`${timestampIso()} Queued FIFO prepare for ${image.mediaName} -> ${result.savedPath}.`);
   }
+}
+
+function resolvePromptId(session: SessionState, mediaName: string): number | null {
+  const renderedMedia = [
+    ...((session.active_batches ?? []).flatMap((batch) => batch.rendered_media ?? [])),
+    ...(session.last_render_batch?.rendered_media ?? []),
+  ];
+  const match = renderedMedia.find((item) => item?.media_name === mediaName);
+  return typeof match?.prompt_id === "number" ? match.prompt_id : null;
+}
+
+function writeAiSidecarIfPossible(session: SessionState, mediaName: string, savedPath: string, downloadedAt: string): void {
+  const promptId = resolvePromptId(session, mediaName);
+  if (promptId == null) {
+    appendLog(`${timestampIso()} AI sidecar deferred for ${mediaName}: prompt_id not found in batch state.`);
+    return;
+  }
+  const payload = buildAiMetadataContext({
+    imagePath: savedPath,
+    mediaName,
+    promptId,
+    downloadedAt,
+    modelUsed: session.current_model ?? "Nano Banana 2 / Flow",
+  });
+  writeJsonFile(path.join(path.dirname(savedPath), `${path.parse(savedPath).name}.metadata.json`), payload);
 }
 
 async function main(): Promise<void> {

@@ -5,9 +5,16 @@
 
 ## PURPOSE
 
-Open Adobe Stock upload items, locate each image's sidecar, apply the metadata fields, and save the item in a ready-to-review state.
+Open Adobe Stock upload items, verify the metadata that should already be prefilled from embedded XMP, apply the Adobe-only finish fields, and save the item in a ready-to-review state.
 
-This file is the final pipeline stage. It applies metadata; it does not generate new images.
+This file is the final pipeline stage. It applies or edits metadata; it does not generate new images.
+
+Default behavior:
+
+- always **check first**
+- if the current Adobe metadata is already strong and aligned -> keep it and log that it passed
+- if the current Adobe metadata is weak, missing, or mismatched -> rewrite only the failing fields
+- for pipeline images, title and keywords should normally already be prefilled from XMP written during File 03
 
 ---
 
@@ -26,6 +33,7 @@ The full report must be loaded into active memory before this file runs.
 ```text
 PROJECT_ROOT\data\image_registry.json
 PROJECT_ROOT\data\adobe_stock_selectors.json
+PROJECT_ROOT\data\adobe_outside_system\
 PROJECT_ROOT\logs\automation.log
 PROJECT_ROOT\downloads\upscaled\
 C:\Users\11\browser-automation-core\launch_browser.bat
@@ -46,6 +54,13 @@ If port 9222 is already ready -> skip launch, connect directly
 ```
 
 Run the launcher with no extra arguments. Do not append a custom port, profile, or URL.
+
+Command-first entry:
+
+```text
+Check only: npx --yes tsx PROJECT_ROOT\scripts\adobe_runtime.ts --action=check --date=YYYY-MM-DD
+Apply pass: npx --yes tsx PROJECT_ROOT\scripts\adobe_runtime.ts --action=apply --date=YYYY-MM-DD
+```
 
 Selector stability order: `data-t` → semantic `name` → semantic `id` → `aria-label` or role → placeholder or text match. Never rely on generated hash classes.
 
@@ -71,7 +86,7 @@ Keep this file mostly single-controller because Adobe page state is fragile and 
 - **Controller Agent**
   Owns thumbnail selection, sidecar lookup, field application, save confirmation, and pagination.
 - **Optional Helper Agent — Outside-System Draft**
-  Used only for outside-system uploads. It may draft metadata from the selected image, but the Controller Agent must still create the sidecar, update registry state, and apply the fields.
+Used only for outside-system uploads. It may draft metadata from the selected image, but the Controller Agent must still create the sidecar, update registry state, and apply or overwrite the fields.
 
 Rule:
 
@@ -100,9 +115,18 @@ Because live Adobe UI state is fragile, the Evaluator should critique and send c
 
 ## IMAGE TYPES
 
-**All images that went through the automation pipeline** — both AI-generated and manual — arrive in File 04 with a complete sidecar (`status: ready_for_upload`). File 03 generates full metadata for manual images during its scan phase. File 04 is a pure applier for these images.
+**All images that went through the automation pipeline** — both AI-generated and manual — arrive in File 04 with a complete sidecar (`status: ready_for_upload`) and should already have XMP title/keywords embedded in the final image. File 03 generates full metadata for manual images during its scan phase and then embeds XMP after upscale. File 04 is mostly a verifier + finish-field applier for these images.
 
 **Exception: images uploaded outside the automation system** (uploaded directly to Adobe Stock without going through this pipeline) have no registry entry, no sidecar, or both. These are handled as a fallback case only.
+
+Outside-system rule:
+
+- do not assume the Adobe fields are blank
+- read the current Adobe title, keywords, category, and disclosure state
+- inspect the image visually
+- if the current Adobe metadata is weak, generic, mismatched, or incomplete, overwrite it
+- File 04 must be able to check, add, edit, replace, erase, or improve Adobe metadata fields the same way a human editor can
+- if the outside-system upload already has strong metadata, keep it, capture it into a sidecar under `data\adobe_outside_system\`, and log it as a passed check instead of rewriting it blindly
 
 ---
 
@@ -145,7 +169,25 @@ stop when no Next page is found
 
 Click the thumbnail. Wait for right panel to update. Read `Original name(s)` from the file info block at the bottom of the panel.
 
-### Step 2 — Determine path
+### Step 2 — Check current Adobe state first
+
+Before changing anything:
+
+1. Read the current Adobe title
+2. Read the current Adobe keywords
+3. Read the current category and file type
+4. Read the AI disclosure state
+5. Compare the current Adobe metadata against:
+   - the selected image visual
+   - the sidecar if one exists
+   - the success report quality rules
+
+Decision:
+
+- if metadata is already strong and aligned -> mark `checked_passed`
+- if metadata is weak, generic, incomplete, or mismatched -> continue to rewrite the failing fields only
+
+### Step 3 — Determine path
 
 Load registry entry → load sidecar → read `status`.
 
@@ -153,27 +195,36 @@ Load registry entry → load sidecar → read `status`.
 - if sidecar says `analysis_failed` -> skip and flag for manual review
 - if registry or sidecar is missing -> use outside-system fallback workflow
 
-### Step 3A — Pipeline apply workflow
+### Step 4A — Pipeline apply workflow
 
 1. Load all metadata from sidecar
-2. Visual sanity check (5 seconds): does the image roughly match the `series_slot` description? If obvious mismatch, rewrite only the mismatched fields and flag the image.
-3. Apply all fields (see Field Rules below)
-4. Click Save
+2. Check whether the current Adobe fields already match the sidecar strongly.
+3. Visual sanity check (5 seconds): does the image roughly match the `series_slot` description and the prefilled Adobe title/keywords?
+4. If the current Adobe fields already match and quality is strong -> log `checked_passed`, do not rewrite blindly.
+5. If fields are weak or mismatched -> rewrite only the failing fields and click Save.
 
-### Step 3B — Outside-system fallback workflow
+Strong sidecar rule:
+
+- File 04 must not trust a pipeline sidecar just because it exists
+- if the sidecar has fewer than 20 keywords, weak generic wording, or misses clear composition details like top view, close-up, portrait, hand holding, card text, tablet, eye detail, or server-rack context, treat it as weak and rebuild/fix it before apply
+- if Adobe already shows strong prefilled title/keywords from XMP and they align with the sidecar and image, keep them
+
+### Step 4B — Outside-system fallback workflow
 
 1. Visually inspect the image fully
-2. Generate the complete metadata from the image itself using the success report rules.
-3. Create a new sidecar and registry entry so this image is brought back into the automation system.
-4. Evaluate generated fields against success report standards:
+2. Read the current Adobe metadata and score it against the visual.
+3. If the current metadata is already strong, keep it, capture it into a local sidecar, and mark the image `checked_passed`.
+4. If the current metadata is weak, generate the complete improved metadata from the image itself using the success report rules.
+5. Create or update a local sidecar and registry entry so this image is brought back into the automation system.
+6. Evaluate generated or retained fields against success report standards:
 - **Title**: pass if under 70 chars, has subject + context + differentiator, reads naturally. Fail if empty, generic, keyword-stuffed, or over 70 chars.
 - **Keywords**: pass if 20–35 present and first 7–10 are specific buyer-intent phrases. Fail if fewer than 20, or first slots have single generic words.
 - **Category**: pass if most specific applicable category is selected. Fail if wrong or generic.
 - **AI checkbox**: pass if correctly matches actual image source. Fail if AI image has box unchecked.
-5. If all fields pass → keep the generated metadata and continue
-6. If any field fails → rewrite only the failing fields using success report standards
-7. Save the completed metadata back to the sidecar before applying
-8. Apply all fields
+7. If all fields pass -> keep the current/generated metadata and continue
+8. If any field fails -> rewrite only the failing fields using success report standards
+9. Save the completed metadata back to the sidecar before applying
+10. Apply all fields only when the Adobe item needs improvement; do not rewrite a strong item just for the sake of rewriting
 
 ---
 
@@ -193,10 +244,10 @@ Verify the language selector shows "English". Adobe Stock pre-selects English by
 The two checkboxes have a parent-child relationship. Always apply in order:
 
 1. Locate `input[name="content-tagger-generative-ai-checkbox"]`
-2. If not checked → click it → wait 500ms
+2. Set it only if the current value is wrong
 3. Locate `input[name="content-tagger-generative-ai-property-release-checkbox"]` — this element only appears in DOM after the first checkbox is checked
-4. If not checked → click it → wait 300ms
-5. Verify: the "Recognizable people or property?" Yes/No toggle is no longer visible (checking the fictional box causes it to disappear)
+4. Set it only if the current value is wrong
+5. Verify: the "Recognizable people or property?" Yes/No toggle is no longer visible when the fictional box should be active
 
 ### Title
 
@@ -204,10 +255,13 @@ The two checkboxes have a parent-child relationship. Always apply in order:
 - buyer-search style, not a sentence
 - lead with subject and commercial meaning
 - no "stock photo of", "image of", "AI generated"
+- for pipeline images, do not erase and retype the title if the XMP-prefilled title is already correct
 
 Interaction: click title textarea → Ctrl+A → Delete → type new title at delay:0
 
 ### Keywords
+
+- for pipeline images, do not erase and retype keywords if the XMP-prefilled set is already strong and aligned
 
 - follow the 35-keyword blueprint from the success report
 - front-load the strongest buyer-intent terms in slots 1–10
@@ -240,7 +294,7 @@ Science | Social Issues | Sports | Technology | Transport | Travel
 Write session summary to log:
 
 ```text
-[N] applied from sidecar | [N] rebuilt outside-system uploads | [N] skipped | [N] failed
+[N] checked | [N] updated from sidecar | [N] rebuilt outside-system uploads | [N] skipped | [N] failed
 ```
 
 ---

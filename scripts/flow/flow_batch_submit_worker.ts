@@ -4,6 +4,7 @@ import type { Page } from "playwright";
 import { connectBrowser, getOrOpenPage, isDebugPortReady, waitForElement } from "../../../../../browser-automation-core/browser_core";
 import { AUTOMATION_LOG_PATH, DESCRIPTIONS_PATH, SESSION_STATE_PATH } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
+import { appendAutomationLog } from "../common/logging";
 
 type Description = {
   id: number;
@@ -104,7 +105,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 function appendLog(message: string): void {
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} ${message}\n`, "utf8");
+  appendAutomationLog(message);
 }
 
 function normalize(value: string | null | undefined): string {
