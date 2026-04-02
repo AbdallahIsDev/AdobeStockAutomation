@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { sidecarPathForImage } from "./common/sidecars";
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendAutomationLog } from "./common/logging";
 import { jsonTimestamp } from "./common/time";
@@ -243,7 +244,7 @@ async function main(): Promise<void> {
   const imagePath = path.resolve(args.imagePath);
   const sidecarPath = args.sidecarPath
     ? path.resolve(args.sidecarPath)
-    : path.join(path.dirname(imagePath), `${path.parse(imagePath).name}.metadata.json`);
+    : sidecarPathForImage(imagePath);
 
   const result = embedXmpMetadata(imagePath, sidecarPath);
   const level =

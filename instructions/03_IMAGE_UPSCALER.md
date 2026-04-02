@@ -111,6 +111,7 @@ If true parallel agents are unavailable, preserve the same Planner -> Generator 
 - already named correctly and should already have prompt-context `.metadata.json` sidecars
 - usually need 2x upscale (long side ~2752px)
 - if AI sidecar is missing: create only a rebuild marker and regenerate from prompt/trend context; do not derive final metadata from the filename
+- AI sidecars live under `downloads\[date]\metadata\`, and final upscaled sidecars live under `downloads\upscaled\[date]\metadata\`
 
 ### Manual images
 
@@ -141,7 +142,7 @@ Before any upscale work:
 
 1. load or create `image_registry.json`
 2. scan `downloads\` recursively; exclude `downloads\upscaled\`, `downloads\failed\`, `staging\`, and non-image files
-3. for each image not in registry: register it and ensure exactly one `.metadata.json` sidecar exists
+3. for each image not in registry: register it and ensure exactly one `.metadata.json` sidecar exists in that folder's `metadata\` subfolder
 4. if AI image sidecar is missing: create only a rebuild-required shell (mark `source: ai_generated`) and log a warning
 5. if a manual image has no sidecar: generate the full sidecar now during File 03 before upscale
 6. log orphan sidecars (sidecars with no matching image) for manual review
@@ -184,7 +185,7 @@ Registry fields to maintain per entry:
   "dimensions": { "width": 1920, "height": 1080 },
   "long_side": 1920,
   "assigned_scale": 2,
-  "metadata_sidecar": "downloads\\manual\\manual_example_M001_20260328.metadata.json",
+  "metadata_sidecar": "downloads\\manual\\metadata\\manual_example_M001_20260328.metadata.json",
   "upscaled": false,
   "upscaled_path": null,
   "upscaled_dimensions": null,
@@ -201,7 +202,7 @@ Registry fields to maintain per entry:
 
 After each final output file is ready in `downloads\upscaled\[date]\`:
 
-1. load the matching `.metadata.json` sidecar from the same folder
+1. load the matching `.metadata.json` sidecar from `downloads\upscaled\[date]\metadata\`
 2. read:
    - `adobe_stock_metadata.title`
    - `adobe_stock_metadata.keywords`

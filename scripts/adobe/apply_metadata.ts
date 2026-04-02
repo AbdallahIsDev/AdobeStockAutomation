@@ -11,6 +11,7 @@ import {
 } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
 import { appendAutomationLog, moveJsonReportIfPresent } from "../common/logging";
+import { listSidecarFiles } from "../common/sidecars";
 import { loadAdobeSelectors, saveAdobeSelectors, type AdobeSelectorMap } from "./selector_cache";
 
 type AdobeMetadata = {
@@ -383,13 +384,16 @@ function buildSidecarIndex(): Map<string, MatchResult> {
     if (!fs.existsSync(folder)) {
       continue;
     }
-    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith(".metadata.json")) {
-        continue;
-      }
-      const sidecarPath = path.join(folder, entry.name);
+    const sidecarPaths = folder.includes("adobe_outside_system")
+      ? fs.readdirSync(folder, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".metadata.json"))
+        .map((entry) => path.join(folder, entry.name))
+      : listSidecarFiles(folder);
+
+    for (const sidecarPath of sidecarPaths) {
+      const entryName = path.basename(sidecarPath);
       const sidecar = readJson<Sidecar>(sidecarPath, {});
-      const sidecarStem = entry.name.replace(/\.metadata\.json$/i, "");
+      const sidecarStem = entryName.replace(/\.metadata\.json$/i, "");
       const imageFile = sidecar.image_file ?? `${sidecarStem}.png`;
       const imagePath = path.join(folder, imageFile);
       const match: MatchResult = {

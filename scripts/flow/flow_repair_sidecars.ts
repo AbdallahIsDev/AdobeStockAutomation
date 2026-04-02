@@ -3,6 +3,7 @@ import path from "node:path";
 import { buildAiMetadataContext } from "../common/ai_metadata";
 import { appendAutomationLog } from "../common/logging";
 import { resolvePromptIdForDownload } from "../common/prompt_resolution";
+import { sidecarPathForImage } from "../common/sidecars";
 import { SESSION_STATE_PATH } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
 
@@ -34,10 +35,6 @@ function writeJson(filePath: string, value: unknown): void {
 
 function appendLog(message: string): void {
   appendAutomationLog(message);
-}
-
-function sidecarPathFor(imagePath: string): string {
-  return path.join(path.dirname(imagePath), `${path.parse(imagePath).name}.metadata.json`);
 }
 
 function sortByDownloadedAt(a: DownloadedImage, b: DownloadedImage): number {
@@ -74,7 +71,7 @@ function main(): void {
       continue;
     }
 
-    const sidecarPath = sidecarPathFor(savedPath);
+    const sidecarPath = sidecarPathForImage(savedPath);
     const promptId = resolvePromptIdForDownload(
       workingSession,
       mediaName,

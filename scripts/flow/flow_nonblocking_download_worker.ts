@@ -6,6 +6,7 @@ import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../
 import { AUTOMATION_LOG_PATH, DATA_DIR, DESCRIPTIONS_PATH, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
 import { buildAiMetadataContext } from "../common/ai_metadata";
 import { resolvePromptIdForDownload } from "../common/prompt_resolution";
+import { resolveExistingSidecarPath, sidecarPathForImage } from "../common/sidecars";
 import { dateFolderName, jsonTimestamp } from "../common/time";
 import { appendAutomationLog } from "../common/logging";
 
@@ -485,8 +486,10 @@ function removeImageAndSidecar(filePath: string | null | undefined): void {
     // best effort only
   }
   try {
-    const sidecarPath = path.join(path.dirname(target), `${path.parse(target).name}.metadata.json`);
-    fs.rmSync(sidecarPath, { force: true });
+    const sidecarPath = resolveExistingSidecarPath(target);
+    if (sidecarPath) {
+      fs.rmSync(sidecarPath, { force: true });
+    }
   } catch {
     // best effort only
   }
@@ -507,7 +510,7 @@ function writeAiSidecarIfPossible(session: SessionState, image: GeneratedImage, 
     downloadedAt,
     modelUsed: session.current_model ?? "Nano Banana 2 / Flow",
   });
-  const sidecarPath = path.join(path.dirname(savedPath), `${path.parse(savedPath).name}.metadata.json`);
+  const sidecarPath = sidecarPathForImage(savedPath);
   writeJson(sidecarPath, payload);
   appendLog(`AI sidecar written immediately for ${image.mediaName} using prompt ${promptId}.`);
   return promptId;

@@ -4,6 +4,7 @@ import { DOWNLOADS_DIR, REPORTS_DIR, ROOT } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
 import { buildPromptMetadataSeed } from "../common/ai_metadata";
 import { moveJsonReportIfPresent } from "../common/logging";
+import { listSidecarFiles } from "../common/sidecars";
 
 type Sidecar = {
   image_file?: string;
@@ -84,11 +85,8 @@ async function main(): Promise<void> {
     throw new Error(`Upscaled folder not found: ${folder}`);
   }
 
-  for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".metadata.json")) {
-      continue;
-    }
-    const filePath = path.join(folder, entry.name);
+  for (const filePath of listSidecarFiles(folder)) {
+    const entryName = path.basename(filePath);
     try {
       const sidecar = readJson<Sidecar>(filePath, {});
       if (!shouldRepair(sidecar)) {
@@ -122,7 +120,7 @@ async function main(): Promise<void> {
       writeJson(filePath, sidecar);
       report.repaired += 1;
     } catch (error) {
-      report.errors.push(`${entry.name}: ${error instanceof Error ? error.message : String(error)}`);
+      report.errors.push(`${entryName}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

@@ -108,12 +108,12 @@ Spawn the next stage only after the current stage has signaled success and that 
    Command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage image_creation
    Then run: npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=run-session
    File: instructions\02_IMAGE_CREATION.md
-   Verify before continuing: images are written to downloads\[date]\ and each image has a matching .metadata.json sidecar.
+   Verify before continuing: images are written to downloads\[date]\ and each image has a matching downloads\[date]\metadata\[image].metadata.json sidecar.
 
 3. Image Upscaler
    Command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action batch
    File: instructions\03_IMAGE_UPSCALER.md
-   Verify before continuing: upscaled images exist in downloads\upscaled\[date]\, matching sidecars exist, and XMP embed status is recorded for each final image before Adobe upload.
+   Verify before continuing: upscaled images exist in downloads\upscaled\[date]\, matching sidecars exist in downloads\upscaled\[date]\metadata\, and XMP embed status is recorded for each final image before Adobe upload.
 
 4. Metadata Optimizer
    File: instructions\04_METADATA_OPTIMIZER.md
@@ -220,14 +220,14 @@ For full-system runs, the orchestrator should think in this exact pattern:
    Session command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage image_creation
    Primary runtime command: npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=run-session
    Internal workflow: Planner -> Generator -> Evaluator
-   Completion check: downloads\[date]\ contains images and each image has a matching .metadata.json sidecar
+   Completion check: downloads\[date]\ contains images and each image has a matching sidecar in downloads\[date]\metadata\
    Exception handling: if Flow shows visible failed tiles or a creation exception that the current batch state did not capture cleanly, call `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=recover-failures` before attempting manual UI repair
 
 3. Spawn Image Upscaler Agent
    Assigned file: instructions\03_IMAGE_UPSCALER.md
    Session command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\upscale_runtime.ps1 -Action batch
    Internal workflow: Planner -> Generator -> Evaluator
-   Completion check: downloads\upscaled\[date]\ is populated, each final image has a matching sidecar, and XMP embed status is recorded in sidecar/registry state
+   Completion check: downloads\upscaled\[date]\ is populated, each final image has a matching sidecar in downloads\upscaled\[date]\metadata\, and XMP embed status is recorded in sidecar/registry state
 
 4. Spawn Metadata Optimizer Agent
    Assigned file: instructions\04_METADATA_OPTIMIZER.md
@@ -270,7 +270,7 @@ Rules:
 - File 02 must use the rolling nonblocking download path and FIFO background prepare by default; do not wait for all four images before downloading ready ones
 - File 02 should normally be executed through `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=run-session`, which must keep the loop alive until the session cap or prompt exhaustion instead of stopping after one pass
 - File 02 `run-session` must stay single-controller; if another `run-session` is already active for the same project session, do not start a duplicate controller
-- if File 02 finds already-downloaded session images missing `.metadata.json` sidecars, it must repair them first with `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=repair-sidecars` before continuing generation
+- if File 02 finds already-downloaded session images missing `.metadata.json` sidecars in the date folder's `metadata\` subfolder, it must repair them first with `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=repair-sidecars` before continuing generation
 - if File 02 drift already created duplicate prompt-slot outputs, browser-spill files, or mismatched sidecars, repair them with `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=reconcile-downloads` before continuing generation
 - File 02 must treat 64 images as a per-session cap, not a per-day cap. Starting a new session later the same day must provide a fresh 64-image budget.
 - File 02 must treat 32 wide and 32 square as the per-session aspect caps and carry extra trends into the next session instead of dropping them

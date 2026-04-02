@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { sidecarPathForImage } from "../common/sidecars";
 import {
   ADOBE_STOCK_SELECTORS_PATH,
   AUTOMATION_LOG_PATH,
@@ -1693,7 +1694,7 @@ function main(): void {
     const trend = trendsById.get(description.trend_id);
     const imagePath = downloaded.saved_path;
     const imageFile = path.basename(imagePath);
-    const sidecarPath = path.join(path.dirname(imagePath), `${path.parse(imageFile).name}.metadata.json`);
+    const sidecarPath = sidecarPathForImage(imagePath);
     const dims = pngDimensions(imagePath);
     const longSide = Math.max(dims.width, dims.height);
 
@@ -1772,7 +1773,7 @@ function main(): void {
 
     const trend = trendsById.get(description.trend_id);
     const imagePath = downloaded.saved_path;
-    const sidecarPath = path.join(path.dirname(imagePath), `${path.parse(imageFile).name}.metadata.json`);
+    const sidecarPath = sidecarPathForImage(imagePath);
     const dims = pngDimensions(imagePath);
     const longSide = Math.max(dims.width, dims.height);
 

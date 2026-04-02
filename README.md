@@ -6,6 +6,7 @@ Metadata rule:
 
 - never generate Adobe metadata from the downloaded filename alone
 - AI image sidecars must come from prompt + trend context at download time
+- AI image sidecars live in each date folder's `metadata\` subfolder, not beside the image file
 - manual images must stay blocked until visual analysis generates their metadata
 - File 04 always starts with a check pass before any Adobe write
 - Adobe-stage fallback may check, add, edit, replace, erase, or improve weak metadata for outside-system uploads
@@ -17,11 +18,12 @@ Metadata rule:
 - `downloads/` is intentionally excluded from project backups because it is the heaviest folder and the image files themselves already live there as the source of truth.
 - Use `powershell -ExecutionPolicy Bypass -File scripts\session_runtime.ps1 -Action backup` to create a local-state snapshot before risky experiments.
 - Use `powershell -ExecutionPolicy Bypass -File scripts\session_runtime.ps1 -Action reconcile` to rebuild runtime JSON from disk if the state folder is missing or damaged.
+- Use `npx --yes tsx scripts\session\migrate_metadata_layout.ts` for the one-time sidecar move into each date folder's `metadata\` subfolder when normalizing older library dates.
 
 ## What This Project Does
 
 1. Researches commercially promising stock trends and ranks them for execution.
-2. Generates and downloads image series from Google Flow with sidecar metadata for every successful image.
+2. Generates and downloads image series from Google Flow with sidecar metadata for every successful image, stored under each date folder's `metadata\` subfolder.
 3. Normalizes, registers, upscales, and embeds XMP metadata into the final image before upload, with FIFO post-download prepare as the default and 16-image batch chunks for standalone upscale runs.
 4. Verifies the prefilled Adobe metadata, then applies only the Adobe-only finish fields or any truly mismatched fields so the final review can be done quickly.
 
@@ -32,7 +34,7 @@ Metadata rule:
 - `instructions/01_TREND_RESEARCH.md`
   Runs the orchestrator boot, static cache check, dynamic research, and trend scoring.
 - `instructions/02_IMAGE_CREATION.md`
-  Builds the 8-slot prompt series, drives Google Flow, downloads renders, and writes prompt-context `.metadata.json` sidecars for AI images.
+  Builds the 8-slot prompt series, drives Google Flow, downloads renders, and writes prompt-context `.metadata.json` sidecars for AI images into `downloads\[date]\metadata\`.
 - `instructions/03_IMAGE_UPSCALER.md`
   Scans all downloaded images, generates full metadata for manual images during the scan phase, updates `image_registry.json`, upscales images with Upscayl, and embeds XMP metadata into the final files before upload.
 - `instructions/04_METADATA_OPTIMIZER.md`
@@ -65,6 +67,7 @@ PROJECT_ROOT\
 │   │   ├── ai_metadata.ts
 │   │   ├── failed_assets.ts
 │   │   ├── logging.ts
+│   │   ├── sidecars.ts
 │   │   └── time.ts
 │   ├── flow\                           ← Internal Flow workers
 │   │   ├── flow_batch_submit_worker.ts
@@ -75,6 +78,7 @@ PROJECT_ROOT\
 │   │   └── flow_wait_for_new_renders.ts
 │   ├── session\                        ← Internal session helpers
 │   │   ├── bootstrap_runtime_state.ps1
+│   │   ├── migrate_metadata_layout.ts
 │   │   ├── set_session_mode.ps1
 │   │   ├── start_full_system_session.ps1
 │   │   └── start_stage_session.ps1
@@ -90,10 +94,14 @@ PROJECT_ROOT\
 │       └── selector_cache.ts
 │
 ├── downloads\                          ← Source images and final prepared outputs
-│   ├── [YYYY-MM-DD]\                   ← AI-generated images + `.metadata.json` sidecars
+│   ├── [YYYY-MM-DD]\                   ← AI-generated images only
+│   │   └── metadata\                   ← `.metadata.json` sidecars for that date folder
 │   ├── failed\                         ← Failed assets grouped by date and asset name
 │   ├── manual\                         ← Manually added source images
+│   │   └── metadata\                   ← Sidecars for manual images once File 03 analyzes them
 │   └── upscaled\                       ← Final prepared output set
+│       ├── [YYYY-MM-DD]\               ← Upscaled images only
+│       │   └── metadata\               ← Final sidecars for that upscaled date folder
 │
 ├── staging\                            ← Temporary upscale buckets
 │   ├── x2\
@@ -201,7 +209,7 @@ If ExifTool is installed outside PATH, set `data\upscaler_state.json -> exiftool
 
 ## Operational Rules
 
-- Every downloaded image must have exactly one matching `.metadata.json` sidecar.
+- Every downloaded image must have exactly one matching `.metadata.json` sidecar in the sibling `metadata\` subfolder for that date folder.
 - Manual images must receive complete metadata during File 03 before they are allowed to upscale.
 - File 02 treats policy violations as prompt rewrites, not account-limit failures.
 - File 02 downloads completed renders opportunistically and does not wait for a full batch to finish before continuing submission.
@@ -224,7 +232,7 @@ If ExifTool is installed outside PATH, set `data\upscaler_state.json -> exiftool
 - `run-session` now enforces a single-controller lock so multiple agents cannot submit the same prompt range twice inside one live session.
 - `run-session` may submit a partial recovery subset from an older 4-prompt group when only some prompt slots are missing after a drift cleanup pass.
 - `npx --yes tsx scripts/flow_runtime.ts --action=recover-failures` is the scripted repair path for visible Flow failed tiles that escaped normal batch-state handling.
-- `npx --yes tsx scripts/flow_runtime.ts --action=repair-sidecars` repairs missing AI `.metadata.json` sidecars for already-downloaded session images before the pipeline continues.
+- `npx --yes tsx scripts/flow_runtime.ts --action=repair-sidecars` repairs missing AI `.metadata.json` sidecars for already-downloaded session images in the date folder's `metadata\` subfolder before the pipeline continues.
 - `npx --yes tsx scripts/flow_runtime.ts --action=reconcile-downloads` cleans duplicate/download-spill drift, keeps one canonical file per prompt slot, and resets stranded prompt slots back to `ready` for a clean rerun.
 - File 03 batch upscale is a sync/catch-up pass only for images not already marked `upscaled = true`.
 - File 03 batch upscale runs in 16-image chunks so a full 64-image session resolves in four clean upscale batches.

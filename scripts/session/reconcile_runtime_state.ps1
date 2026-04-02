@@ -91,6 +91,24 @@ function Get-ProjectRelativePath {
   return ($relative -replace "/", "\")
 }
 
+function Get-MetadataSidecarPath {
+  param([string]$ImagePath)
+
+  $directory = Split-Path -Parent $ImagePath
+  $stem = [System.IO.Path]::GetFileNameWithoutExtension($ImagePath)
+  $preferred = Join-Path (Join-Path $directory "metadata") ($stem + ".metadata.json")
+  if (Test-Path $preferred) {
+    return $preferred
+  }
+
+  $legacy = [System.IO.Path]::ChangeExtension($ImagePath, ".metadata.json")
+  if (Test-Path $legacy) {
+    return $legacy
+  }
+
+  return $preferred
+}
+
 function Get-ImageDimensions {
   param([string]$Path)
 
@@ -233,7 +251,7 @@ foreach ($directory in $sourceDirs) {
   foreach ($file in Get-ImageFiles -Root $directory.FullName) {
     $filename = $file.Name
     $relativePath = Get-ProjectRelativePath $file.FullName
-    $metadataPath = [System.IO.Path]::ChangeExtension($file.FullName, ".metadata.json")
+    $metadataPath = Get-MetadataSidecarPath -ImagePath $file.FullName
     $relativeMetadataPath = if (Test-Path $metadataPath) { Get-ProjectRelativePath $metadataPath } else { $null }
     $dimensions = Get-ImageDimensions -Path $file.FullName
     $existingEntry = if ($imagesMap.Contains($filename)) { Convert-ToPlainObject $imagesMap[$filename] } else { $null }

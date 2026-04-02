@@ -138,7 +138,7 @@ Adobe Stock shows at the bottom of the right panel: `File ID(s): XXXXXXX - Origi
 1. Read the original filename from that text
 2. Look up the filename in image_registry.json
 3. Read the upscaled_path field
-4. Load [same_name].metadata.json from the same folder
+4. Load downloads\upscaled\[date]\metadata\[same_name].metadata.json
 ```
 
 Status interpretation:

@@ -13,6 +13,7 @@ import { quarantineFailedAsset } from "../common/failed_assets";
 import { buildAiMetadataContext } from "../common/ai_metadata";
 import { appendAutomationLog } from "../common/logging";
 import { resolvePromptIdForDownload } from "../common/prompt_resolution";
+import { sidecarPathForImage } from "../common/sidecars";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -597,7 +598,7 @@ function writeAiSidecarIfPossible(session: SessionState, mediaName: string, save
     downloadedAt,
     modelUsed: session.current_model ?? "Nano Banana 2 / Flow",
   });
-  writeJsonFile(path.join(path.dirname(savedPath), `${path.parse(savedPath).name}.metadata.json`), payload);
+  writeJsonFile(sidecarPathForImage(savedPath), payload);
   appendLog(`${timestampIso()} AI sidecar written immediately for ${mediaName} using prompt ${promptId}.`);
   return promptId;
 }

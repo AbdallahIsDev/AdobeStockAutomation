@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { appendAutomationLog } from "../common/logging";
+import { listSidecarFiles, resolveExistingSidecarPath } from "../common/sidecars";
 import { DESCRIPTIONS_PATH, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
 import { dateFolderName } from "../common/time";
 
@@ -107,18 +108,14 @@ function normalizePromptFamilyStem(fileName: string): string {
   return normalizeProjectImageStem(normalizeBrowserSpillStem(fileName)).replace(/_\d{12}$/i, "");
 }
 
-function imageSidecarPath(imagePath: string): string {
-  return path.join(path.dirname(imagePath), `${path.parse(imagePath).name}.metadata.json`);
-}
-
 function safeMoveWithSidecar(imagePath: string, destinationDir: string): void {
   fs.mkdirSync(destinationDir, { recursive: true });
   const destinationImage = path.join(destinationDir, path.basename(imagePath));
   if (fs.existsSync(imagePath)) {
     fs.renameSync(imagePath, destinationImage);
   }
-  const sidecarPath = imageSidecarPath(imagePath);
-  if (fs.existsSync(sidecarPath)) {
+  const sidecarPath = resolveExistingSidecarPath(imagePath);
+  if (sidecarPath) {
     fs.renameSync(sidecarPath, path.join(destinationDir, path.basename(sidecarPath)));
   }
 }
@@ -233,25 +230,22 @@ function main(): void {
       }
       const filePath = path.join(dayDir, entry.name);
       const isImage = /\.(png|jpe?g|webp)$/i.test(entry.name);
-      const isSidecar = entry.name.endsWith(".metadata.json");
-      if (!isImage && !isSidecar) {
+      if (!isImage) {
         continue;
       }
 
       if (isImage && !canonicalPaths.has(filePath)) {
         safeMoveWithSidecar(filePath, untrackedDir);
       }
-      if (isSidecar) {
-        if (!fs.existsSync(filePath)) {
-          continue;
-        }
-        const sidecarBase = filePath.replace(/\.metadata\.json$/i, "");
-        const hasCanonicalImage = [...canonicalPaths].some((candidatePath) => path.parse(candidatePath).dir === dayDir && path.parse(candidatePath).name === path.parse(sidecarBase).name);
-        if (!hasCanonicalImage) {
-          fs.mkdirSync(untrackedDir, { recursive: true });
-          fs.renameSync(filePath, path.join(untrackedDir, path.basename(filePath)));
-        }
-      }
+    }
+  }
+
+  for (const sidecarPath of listSidecarFiles(dayDir)) {
+    const sidecarStem = path.basename(sidecarPath).replace(/\.metadata\.json$/i, "");
+    const hasCanonicalImage = [...canonicalPaths].some((candidatePath) => path.parse(candidatePath).dir === dayDir && path.parse(candidatePath).name === sidecarStem);
+    if (!hasCanonicalImage) {
+      fs.mkdirSync(untrackedDir, { recursive: true });
+      fs.renameSync(sidecarPath, path.join(untrackedDir, path.basename(sidecarPath)));
     }
   }
 

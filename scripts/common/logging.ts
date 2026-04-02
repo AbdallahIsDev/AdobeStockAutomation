@@ -38,10 +38,23 @@ function pruneAutomationLog(): void {
 export function appendAutomationLog(message: string, level: LogLevel = "INFO"): void {
   ensureLogDir();
   pruneAutomationLog();
-  const inferred = level === "INFO"
-    ? inferLevelFromMessage(message)
-    : level;
-  fs.appendFileSync(AUTOMATION_LOG_PATH, `${jsonTimestamp()} [${inferred}] ${message}\n`, "utf8");
+  const lines = message
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0);
+
+  if (!lines.length) {
+    return;
+  }
+
+  const payload = lines.map((line) => {
+    const inferred = level === "INFO"
+      ? inferLevelFromMessage(line)
+      : level;
+    return `${jsonTimestamp()} [${inferred}] ${line}`;
+  }).join("\n");
+
+  fs.appendFileSync(AUTOMATION_LOG_PATH, `${payload}\n`, "utf8");
 }
 
 function inferLevelFromMessage(message: string): LogLevel {

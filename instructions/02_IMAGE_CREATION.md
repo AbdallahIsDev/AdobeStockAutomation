@@ -5,7 +5,7 @@
 
 ## PURPOSE
 
-Convert ranked trends into image-prompt series, create the images in Google Flow, download each successful render, and write a `.metadata.json` sidecar next to every downloaded image.
+Convert ranked trends into image-prompt series, create the images in Google Flow, download each successful render, and write a `.metadata.json` sidecar into the date folder's `metadata\` subfolder for every downloaded image.
 
 This file owns:
 
@@ -211,7 +211,7 @@ Do not skip the sub-agent system.
 - Sub-Agent C - Background file watcher
   Monitors downloads, renames/moves files, and confirms group completion signals.
 - Sub-Agent D - Metadata sidecar writer
-  Writes `[image_path].metadata.json` as soon as each download is confirmed.
+  Writes `downloads\[date]\metadata\[image].metadata.json` as soon as each download is confirmed.
 
 If true parallel sub-agents are unavailable, preserve the same four roles sequentially. Do not collapse them into one vague stage.
 

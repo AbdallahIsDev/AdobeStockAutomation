@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { quarantineFailedAsset } from "../common/failed_assets";
 import { compactDateStamp, dateFolderName, jsonTimestamp } from "../common/time";
 import { appendAutomationLog } from "../common/logging";
+import { sidecarPathForImage } from "../common/sidecars";
 import { embedXmpMetadata } from "../embed_metadata";
 import {
   AUTOMATION_LOG_PATH,
@@ -122,6 +123,92 @@ function appendLog(message: string): void {
 
 function appendUpscalerLog(message: string): void {
   appendAutomationLog(message);
+}
+
+function streamProcessOutput(stream: NodeJS.ReadableStream | null, onLine: (line: string) => void): Promise<void> {
+  return new Promise((resolve) => {
+    if (!stream) {
+      resolve();
+      return;
+    }
+
+    let buffer = "";
+    stream.setEncoding("utf8");
+    stream.on("data", (chunk: string) => {
+      buffer += chunk;
+      const parts = buffer.split(/\r?\n/);
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const line = part.trimEnd();
+        if (line) {
+          onLine(line);
+        }
+      }
+    });
+    stream.on("end", () => {
+      const line = buffer.trim();
+      if (line) {
+        onLine(line);
+      }
+      resolve();
+    });
+    stream.on("error", () => resolve());
+  });
+}
+
+function runUpscaylBatch(
+  cli: string,
+  inputDir: string,
+  outputDir: string,
+  scale: string,
+  modelName: string,
+): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn(cli, [
+      "-i", inputDir,
+      "-o", outputDir,
+      "-s", scale,
+      "-m", "..\\models",
+      "-n", modelName,
+      "-f", "png",
+    ], {
+      cwd: path.dirname(cli),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const stdoutDone = streamProcessOutput(child.stdout, appendUpscalerLog);
+    const stderrDone = streamProcessOutput(child.stderr, appendUpscalerLog);
+
+    let settled = false;
+    const timeoutHandle = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      child.kill("SIGTERM");
+      appendLog(`Upscayl batch timed out after 3600 seconds.`);
+      Promise.all([stdoutDone, stderrDone]).finally(() => resolve(-1));
+    }, 60 * 60 * 1000);
+
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutHandle);
+      appendUpscalerLog(`Upscayl spawn error: ${error.message}`);
+      Promise.all([stdoutDone, stderrDone]).finally(() => resolve(-1));
+    });
+
+    child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutHandle);
+      Promise.all([stdoutDone, stderrDone]).finally(() => resolve(code ?? -1));
+    });
+  });
 }
 
 function windowsRelative(filePath: string): string {
@@ -354,7 +441,7 @@ function copyWithSidecar(sourceImage: string, sourceSidecar: string | null, dest
   fs.copyFileSync(sourceImage, destImage);
   let destSidecar: string | null = null;
   if (sourceSidecar && fs.existsSync(sourceSidecar)) {
-    destSidecar = path.join(destDir, `${path.parse(destImage).name}.metadata.json`);
+    destSidecar = sidecarPathForImage(destImage);
     fs.copyFileSync(sourceSidecar, destSidecar);
   }
   return { imagePath: destImage, sidecarPath: destSidecar };
@@ -381,7 +468,7 @@ function quarantineImage(
   );
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const args = parseArgs();
   ensureFolder(LOGS_DIR);
   ensureStagingPlaceholders();
@@ -430,7 +517,7 @@ function main(): void {
     const dims = readDimensions(imagePath);
     const longSide = dims ? Math.max(dims.width, dims.height) : null;
     const scale = longSide ? assignedScale(longSide) : "low_res";
-    const sidecarPath = path.join(path.dirname(imagePath), `${path.parse(finalName).name}.metadata.json`);
+    const sidecarPath = sidecarPathForImage(imagePath);
     if (!fs.existsSync(sidecarPath)) {
       createSidecar(sidecarPath, finalName, source, {
         ...existing,
@@ -473,7 +560,7 @@ function main(): void {
 
   const imageCount = allImages.length;
   const sidecarCount = listImagesRecursive(DOWNLOADS_DIR)
-    .map((filePath) => path.join(path.dirname(filePath), `${path.parse(filePath).name}.metadata.json`))
+    .map((filePath) => sidecarPathForImage(filePath))
     .filter((sidecarPath) => fs.existsSync(sidecarPath)).length;
 
   appendLog(`Sub-Agent E parity scan complete. Images=${imageCount}, sidecars=${sidecarCount}, created=${sidecarsCreated}, registry=${registry.total_images}.`);
@@ -609,6 +696,37 @@ function main(): void {
     return;
   }
 
+  for (const [groupKey, originalEntries] of Array.from(bucketGroups.entries())) {
+    const [bucket, outputDir] = groupKey.split("|", 2);
+    if (bucket === "copy_only" || !originalEntries.length) {
+      continue;
+    }
+
+    const pendingEntries: RegistryEntry[] = [];
+    for (const entry of originalEntries) {
+      const existingOutputImage = path.join(outputDir, `${path.parse(entry.final_name).name}.png`);
+      if (!fs.existsSync(existingOutputImage)) {
+        pendingEntries.push(entry);
+        continue;
+      }
+
+      const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
+      let existingOutputSidecar: string | null = null;
+      if (fs.existsSync(sourceSidecar)) {
+        existingOutputSidecar = sidecarPathForImage(existingOutputImage);
+        fs.mkdirSync(path.dirname(existingOutputSidecar), { recursive: true });
+        if (!fs.existsSync(existingOutputSidecar)) {
+          fs.copyFileSync(sourceSidecar, existingOutputSidecar);
+        }
+      }
+
+      finalizeOutput(entry, existingOutputImage, existingOutputSidecar);
+      appendLog(`Reconciled existing upscaled output for ${entry.final_name}; skipping re-upscale.`);
+    }
+
+    bucketGroups.set(groupKey, pendingEntries);
+  }
+
   for (const [groupKey, entries] of bucketGroups.entries()) {
     const [bucket, outputDir] = groupKey.split("|", 2);
     if (bucket === "copy_only" || !entries.length) {
@@ -632,26 +750,11 @@ function main(): void {
       }
 
       appendUpscalerLog(`Running CLI for ${bucket} batch ${chunkIndex + 1}/${entryChunks.length} with ${entryChunk.length} image(s) -> ${windowsRelative(outputDir)}.`);
-      const result = spawnSync(cli, [
-        "-i", inputDir,
-        "-o", outputDir,
-        "-s", scale,
-        "-m", "..\\models",
-        "-n", modelName,
-        "-f", "png",
-      ], {
-        cwd: path.dirname(cli),
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 60 * 60 * 1000,
-      });
+      const exitCode = await runUpscaylBatch(cli, inputDir, outputDir, scale, modelName);
 
-      appendUpscalerLog(result.stdout ?? "");
-      appendUpscalerLog(result.stderr ?? "");
-
-      if (result.status !== 0) {
-        appendLog(`Upscayl batch ${bucket} chunk ${chunkIndex + 1}/${entryChunks.length} exited with code ${result.status ?? -1}.`);
-        appendUpscalerLog(`Upscayl batch ${bucket} chunk ${chunkIndex + 1}/${entryChunks.length} exited with code ${result.status ?? -1}.`);
+      if (exitCode !== 0) {
+        appendLog(`Upscayl batch ${bucket} chunk ${chunkIndex + 1}/${entryChunks.length} exited with code ${exitCode}.`);
+        appendUpscalerLog(`Upscayl batch ${bucket} chunk ${chunkIndex + 1}/${entryChunks.length} exited with code ${exitCode}.`);
         for (const entry of entryChunk) {
           const sourceImage = path.join(ROOT, entry.source_path.replaceAll("\\", path.sep));
           const sourceSidecar = path.join(ROOT, entry.metadata_sidecar.replaceAll("\\", path.sep));
@@ -659,7 +762,7 @@ function main(): void {
             sourceImage,
             sourceSidecar,
             "upscale_cli_failed",
-            `${bucket}:chunk_${chunkIndex + 1}:exit_${result.status ?? -1}`,
+            `${bucket}:chunk_${chunkIndex + 1}:exit_${exitCode}`,
           );
           entry.adobe_stock_status = "failed_moved_to_downloads_failed";
           entry.quality_flag = "upscale_failed";
@@ -680,7 +783,8 @@ function main(): void {
         }
         let outputSidecar: string | null = null;
         if (fs.existsSync(sourceSidecar)) {
-          outputSidecar = path.join(outputDir, `${path.parse(outputImage).name}.metadata.json`);
+          outputSidecar = sidecarPathForImage(outputImage);
+          fs.mkdirSync(path.dirname(outputSidecar), { recursive: true });
           fs.copyFileSync(sourceSidecar, outputSidecar);
         }
         finalizeOutput(entry, outputImage, outputSidecar);
@@ -701,4 +805,4 @@ function main(): void {
   }
 }
 
-main();
+void main();
