@@ -6,7 +6,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-& (Join-Path $PSScriptRoot "bootstrap_runtime_state.ps1")
 & (Join-Path $PSScriptRoot "set_session_mode.ps1") -Mode stage_only -Stage $Stage
 
 Write-Output "Stage-only session ready for $Stage."

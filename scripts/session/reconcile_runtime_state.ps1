@@ -68,7 +68,7 @@ function Load-JsonOrDefault {
   }
 
   try {
-    return Convert-ToPlainObject (Get-Content -Path $Path -Raw | ConvertFrom-Json -Depth 100)
+    return Convert-ToPlainObject (Get-Content -Path $Path -Raw | ConvertFrom-Json)
   } catch {
     return Convert-ToPlainObject $Default
   }

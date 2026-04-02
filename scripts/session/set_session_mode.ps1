@@ -11,54 +11,85 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $sessionStatePath = Join-Path $projectRoot "data\session_state.json"
+$downloadsDir = Join-Path $projectRoot "downloads"
+$logsDir = Join-Path $projectRoot "logs"
+
+function Set-SessionValue {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Session,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Name,
+
+    [Parameter(Mandatory = $false)]
+    $Value
+  )
+
+  $property = $Session.PSObject.Properties[$Name]
+  if ($null -ne $property) {
+    $property.Value = $Value
+  } else {
+    $Session | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
+  }
+}
 
 if (-not (Test-Path $sessionStatePath)) {
-  & (Join-Path $PSScriptRoot "bootstrap_runtime_state.ps1")
+  $hasHistoricalProjectState = (
+    ((Test-Path $downloadsDir) -and (Get-ChildItem -Path $downloadsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)) -or
+    ((Test-Path $logsDir) -and (Get-ChildItem -Path $logsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1))
+  )
+
+  if ($hasHistoricalProjectState) {
+    & (Join-Path $PSScriptRoot "reconcile_runtime_state.ps1")
+  } else {
+    & (Join-Path $PSScriptRoot "bootstrap_runtime_state.ps1")
+  }
 }
 
 $session = Get-Content $sessionStatePath -Raw | ConvertFrom-Json
 $now = Get-Date
-$session.session_date = $now.ToString("yyyy-MM-dd")
-$session.session_started_at = "{0}__{1} {2}" -f $now.ToString("yyyy-MM-dd"), $now.ToString("hh:mm:ss"), $now.ToString("tt")
+Set-SessionValue -Session $session -Name "session_date" -Value $now.ToString("yyyy-MM-dd")
+Set-SessionValue -Session $session -Name "session_started_at" -Value ("{0}__{1} {2}" -f $now.ToString("yyyy-MM-dd"), $now.ToString("hh:mm:ss"), $now.ToString("tt"))
 
 if ($Mode -eq "full_system") {
-  $session.pipeline_mode = "full_system"
-  $session.post_download_policy = "fifo_upscale_prepare"
+  Set-SessionValue -Session $session -Name "pipeline_mode" -Value "full_system"
+  Set-SessionValue -Session $session -Name "post_download_policy" -Value "fifo_upscale_prepare"
   if (-not $Stage) {
     $Stage = "trend_research"
   }
 } else {
-  $session.pipeline_mode = "stage_only"
-  $session.post_download_policy = "fifo_upscale_prepare"
+  Set-SessionValue -Session $session -Name "pipeline_mode" -Value "stage_only"
+  Set-SessionValue -Session $session -Name "post_download_policy" -Value "fifo_upscale_prepare"
 }
 
 if ($Stage) {
-  $session.current_stage = $Stage
+  Set-SessionValue -Session $session -Name "current_stage" -Value $Stage
 }
 
-$session.current_step = "session_mode_configured"
-$session.images_created_count = 0
-$session.images_created_16x9_count = 0
-$session.images_created_1x1_count = 0
-$session.images_downloaded_count = 0
-$session.downloads_completed = 0
-$session.current_description_index = $null
-$session.current_trend_id = $null
-$session.current_series_slot = $null
-$session.run_baseline_media_names = @()
-$session.active_batches = @()
-$session.downloaded_images = @()
-$session.current_16x9_submitted = @()
-$session.current_16x9_rendered = @()
-$session.current_16x9_failed = @()
-$session.current_16x9_downloaded = 0
-$session.current_1x1_submitted = @()
-$session.current_1x1_rendered = @()
-$session.current_1x1_failed = @()
-$session.current_1x1_downloaded = 0
-$session.remaining_session_image_capacity = if ($session.session_image_cap) { $session.session_image_cap } else { 64 }
-$session.remaining_16x9_capacity = if ($session.session_aspect_cap) { $session.session_aspect_cap } else { 32 }
-$session.remaining_1x1_capacity = if ($session.session_aspect_cap) { $session.session_aspect_cap } else { 32 }
+Set-SessionValue -Session $session -Name "current_step" -Value "session_mode_configured"
+Set-SessionValue -Session $session -Name "images_created_count" -Value 0
+Set-SessionValue -Session $session -Name "images_created_16x9_count" -Value 0
+Set-SessionValue -Session $session -Name "images_created_1x1_count" -Value 0
+Set-SessionValue -Session $session -Name "images_downloaded_count" -Value 0
+Set-SessionValue -Session $session -Name "downloads_completed" -Value 0
+Set-SessionValue -Session $session -Name "current_description_index" -Value $null
+Set-SessionValue -Session $session -Name "current_trend_id" -Value $null
+Set-SessionValue -Session $session -Name "current_series_slot" -Value $null
+Set-SessionValue -Session $session -Name "run_baseline_media_names" -Value @()
+Set-SessionValue -Session $session -Name "active_batches" -Value @()
+Set-SessionValue -Session $session -Name "downloaded_images" -Value @()
+Set-SessionValue -Session $session -Name "current_16x9_submitted" -Value @()
+Set-SessionValue -Session $session -Name "current_16x9_rendered" -Value @()
+Set-SessionValue -Session $session -Name "current_16x9_failed" -Value @()
+Set-SessionValue -Session $session -Name "current_16x9_downloaded" -Value 0
+Set-SessionValue -Session $session -Name "current_1x1_submitted" -Value @()
+Set-SessionValue -Session $session -Name "current_1x1_rendered" -Value @()
+Set-SessionValue -Session $session -Name "current_1x1_failed" -Value @()
+Set-SessionValue -Session $session -Name "current_1x1_downloaded" -Value 0
+Set-SessionValue -Session $session -Name "remaining_session_image_capacity" -Value $(if ($session.session_image_cap) { $session.session_image_cap } else { 64 })
+Set-SessionValue -Session $session -Name "remaining_16x9_capacity" -Value $(if ($session.session_aspect_cap) { $session.session_aspect_cap } else { 32 })
+Set-SessionValue -Session $session -Name "remaining_1x1_capacity" -Value $(if ($session.session_aspect_cap) { $session.session_aspect_cap } else { 32 })
 
 $session | ConvertTo-Json -Depth 100 | Set-Content -Path $sessionStatePath -Encoding UTF8
 

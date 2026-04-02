@@ -95,7 +95,7 @@ function Ensure-JsonFile {
   $existing = $null
   if (Test-Path $Path) {
     try {
-      $existing = Get-Content $Path -Raw | ConvertFrom-Json -Depth 100
+      $existing = Get-Content $Path -Raw | ConvertFrom-Json
     } catch {
       $existing = $null
     }
@@ -107,8 +107,8 @@ function Ensure-JsonFile {
 }
 
 function Test-HistoricalProjectState {
-  $hasDownloadHistory = Test-Path $downloadsDir -and (Get-ChildItem -Path $downloadsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
-  $hasLogHistory = Test-Path $logsDir -and (Get-ChildItem -Path $logsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+  $hasDownloadHistory = (Test-Path $downloadsDir) -and (Get-ChildItem -Path $downloadsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+  $hasLogHistory = (Test-Path $logsDir) -and (Get-ChildItem -Path $logsDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
   return [bool]($hasDownloadHistory -or $hasLogHistory)
 }
 
