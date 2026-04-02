@@ -425,7 +425,7 @@ function sourceDateFolder(entry: RegistryEntry): string {
   if (parts.length >= 3 && parts[0] === "downloads" && DATE_FOLDER_RE.test(parts[1])) {
     return parts[1];
   }
-  if (entry.registered_at && /^\d{4}-\d{2}-\d{2}__/.test(entry.registered_at)) {
+  if (entry.registered_at && /^\d{4}-\d{2}-\d{2}(?:__|\s{1,2})/.test(entry.registered_at)) {
     return entry.registered_at.slice(0, 10);
   }
   return dateFolderName();

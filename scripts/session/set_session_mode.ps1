@@ -50,7 +50,7 @@ if (-not (Test-Path $sessionStatePath)) {
 $session = Get-Content $sessionStatePath -Raw | ConvertFrom-Json
 $now = Get-Date
 Set-SessionValue -Session $session -Name "session_date" -Value $now.ToString("yyyy-MM-dd")
-Set-SessionValue -Session $session -Name "session_started_at" -Value ("{0}__{1} {2}" -f $now.ToString("yyyy-MM-dd"), $now.ToString("hh:mm:ss"), $now.ToString("tt"))
+  Set-SessionValue -Session $session -Name "session_started_at" -Value ("{0}  {1} {2}" -f $now.ToString("yyyy-MM-dd"), $now.ToString("hh:mm:ss"), $now.ToString("tt"))
 
 if ($Mode -eq "full_system") {
   Set-SessionValue -Session $session -Name "pipeline_mode" -Value "full_system"

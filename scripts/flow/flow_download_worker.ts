@@ -142,7 +142,7 @@ function writeJsonFile(filePath: string, value: unknown): void {
 }
 
 function appendLog(line: string): void {
-  appendAutomationLog(line.replace(/^\d{4}-\d{2}-\d{2}__\d{2}:\d{2}:\d{2}(?: [AP]M)?\s+/, ""));
+  appendAutomationLog(line.replace(/^\d{4}-\d{2}-\d{2}(?:__|\s{1,2})\d{2}:\d{2}:\d{2}(?: [AP]M)?\s+/, ""));
 }
 
 function timestampIso(): string {

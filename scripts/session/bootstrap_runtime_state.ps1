@@ -9,7 +9,7 @@ $backupScript = Join-Path $PSScriptRoot "backup_project_state.ps1"
 function Format-ProjectTimestamp {
   param([datetime]$Date)
 
-  return "{0}__{1} {2}" -f $Date.ToString("yyyy-MM-dd"), $Date.ToString("hh:mm:ss"), $Date.ToString("tt")
+  return "{0}  {1} {2}" -f $Date.ToString("yyyy-MM-dd"), $Date.ToString("hh:mm:ss"), $Date.ToString("tt")
 }
 
 function Convert-ToPlainObject {

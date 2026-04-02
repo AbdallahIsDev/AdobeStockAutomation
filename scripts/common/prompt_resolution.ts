@@ -68,7 +68,7 @@ function inferSeriesSlotFromSuggestedFilename(suggestedFilename: string | undefi
 
 function parseJsonTimestamp(value: string | null | undefined): number | null {
   const text = String(value ?? "").trim();
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})__(\d{2}):(\d{2}):(\d{2})\s(AM|PM)$/i);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:__|\s{1,2})(\d{2}):(\d{2}):(\d{2})\s(AM|PM)$/i);
   if (!match) {
     return null;
   }

@@ -19,8 +19,10 @@ function Format-ProjectTimestamp {
 
   $timeFormat = if ($ForFolder) { "hh-mm-ss" } else { "hh:mm:ss" }
   $timePart = $Date.ToString($timeFormat)
-  $separator = if ($ForFolder) { "_" } else { " " }
-  return "{0}__{1}{2}{3}" -f $Date.ToString("yyyy-MM-dd"), $timePart, $separator, $Date.ToString("tt")
+  if ($ForFolder) {
+    return "{0}__{1}_{2}" -f $Date.ToString("yyyy-MM-dd"), $timePart, $Date.ToString("tt")
+  }
+  return "{0}  {1} {2}" -f $Date.ToString("yyyy-MM-dd"), $timePart, $Date.ToString("tt")
 }
 
 $timestampJson = Format-ProjectTimestamp -Date $timestamp

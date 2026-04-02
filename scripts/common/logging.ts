@@ -19,7 +19,7 @@ function pruneAutomationLog(): void {
   const retentionCutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
   const lines = fs.readFileSync(AUTOMATION_LOG_PATH, "utf8").split(/\r?\n/).filter(Boolean);
   const kept = lines.filter((line) => {
-    const match = line.match(/^(\d{4}-\d{2}-\d{2})__(\d{2}):(\d{2}):(\d{2}) (AM|PM)/);
+    const match = line.match(/^(\d{4}-\d{2}-\d{2})(?:__|\s{1,2})(\d{2}):(\d{2}):(\d{2}) (AM|PM)/);
     if (!match) {
       return true;
     }

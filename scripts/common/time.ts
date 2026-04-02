@@ -7,7 +7,7 @@ export function jsonTimestamp(date: Date = new Date()): string {
   const mi = String(date.getMinutes()).padStart(2, "0");
   const ss = String(date.getSeconds()).padStart(2, "0");
   const meridiem = hours24 >= 12 ? "PM" : "AM";
-  return `${yyyy}-${mm}-${dd}__${hh}:${mi}:${ss} ${meridiem}`;
+  return `${yyyy}-${mm}-${dd}  ${hh}:${mi}:${ss} ${meridiem}`;
 }
 
 export function dateFolderName(date: Date = new Date()): string {

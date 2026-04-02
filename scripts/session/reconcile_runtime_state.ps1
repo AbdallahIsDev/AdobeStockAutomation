@@ -18,7 +18,7 @@ Add-Type -AssemblyName System.Drawing
 function Format-ProjectTimestamp {
   param([datetime]$Date)
 
-  return "{0}__{1} {2}" -f $Date.ToString("yyyy-MM-dd"), $Date.ToString("hh:mm:ss"), $Date.ToString("tt")
+  return "{0}  {1} {2}" -f $Date.ToString("yyyy-MM-dd"), $Date.ToString("hh:mm:ss"), $Date.ToString("tt")
 }
 
 $nowJson = Format-ProjectTimestamp -Date $now
