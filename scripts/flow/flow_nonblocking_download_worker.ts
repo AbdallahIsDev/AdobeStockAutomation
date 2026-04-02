@@ -3,8 +3,9 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { Download, Page } from "playwright";
 import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
-import { AUTOMATION_LOG_PATH, DATA_DIR, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
+import { AUTOMATION_LOG_PATH, DATA_DIR, DESCRIPTIONS_PATH, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
 import { buildAiMetadataContext } from "../common/ai_metadata";
+import { resolvePromptIdForDownload } from "../common/prompt_resolution";
 import { dateFolderName, jsonTimestamp } from "../common/time";
 import { appendAutomationLog } from "../common/logging";
 
@@ -12,6 +13,7 @@ type JsonRecord = Record<string, unknown>;
 
 type DownloadedImage = {
   media_name: string;
+  prompt_id?: number | null;
   saved_path: string;
   suggested_filename?: string;
   download_attempt?: number;
@@ -79,6 +81,7 @@ type GeneratedImage = {
 
 type CurrentBatchTarget = {
   media_name: string;
+  prompt_id?: number | null;
   href?: string | null;
   tile_id?: string | null;
 };
@@ -100,12 +103,27 @@ const CDP_PORT = 9222;
 const BETWEEN_REQUESTS_MS = 150;
 const DOWNLOAD_SETTLE_TIMEOUT_MS = 90000;
 const DOWNLOAD_POLL_MS = 1000;
+const WINDOWS_DOWNLOADS_DIR = path.join(process.env.USERPROFILE ?? path.dirname(DOWNLOADS_DIR), "Downloads");
+const MAX_2K_BATCH_SIZE = 4;
 
 function readJson<T>(filePath: string, fallback: T): T {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
   } catch {
     return fallback;
+  }
+}
+
+function readDescriptionSeriesSlots(): Map<number, string> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(DESCRIPTIONS_PATH, "utf8")) as { descriptions?: Array<{ id?: number; series_slot?: string }> };
+    return new Map(
+      (parsed.descriptions ?? [])
+        .filter((item) => typeof item.id === "number" && typeof item.series_slot === "string")
+        .map((item) => [item.id as number, item.series_slot as string]),
+    );
+  } catch {
+    return new Map<number, string>();
   }
 }
 
@@ -133,6 +151,102 @@ function buildTargetPath(suggestedFilename: string, mediaName: string, mode: "2K
   const dir = path.join(DOWNLOADS_DIR, dateFolderName());
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, `${stem}__${mode}__${mediaName}${ext}`);
+}
+
+function extractMediaNameFromPath(filePath: string): string | null {
+  const stem = path.parse(filePath).name;
+  const match = stem.match(/__([0-9a-f-]{36})$/i);
+  return match ? match[1] : null;
+}
+
+function getDownloadedMediaFromProjectFiles(): Set<string> {
+  const dir = path.join(DOWNLOADS_DIR, dateFolderName());
+  if (!fs.existsSync(dir)) {
+    return new Set<string>();
+  }
+
+  const set = new Set<string>();
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const mediaName = extractMediaNameFromPath(path.join(dir, entry.name));
+    if (mediaName) {
+      set.add(mediaName);
+    }
+  }
+  return set;
+}
+
+function matchingBrowserDownloadNames(suggestedFilename: string): Set<string> {
+  const parsed = path.parse(suggestedFilename || "download.png");
+  const names = new Set<string>([`${parsed.name}${parsed.ext}`]);
+  for (let index = 1; index <= 12; index += 1) {
+    names.add(`${parsed.name} (${index})${parsed.ext}`);
+  }
+  return names;
+}
+
+function collectBrowserSavedCandidates(suggestedFilename: string, notBeforeMs: number): string[] {
+  if (!fs.existsSync(WINDOWS_DOWNLOADS_DIR)) {
+    return [];
+  }
+
+  const allowedNames = matchingBrowserDownloadNames(suggestedFilename);
+  return fs.readdirSync(WINDOWS_DOWNLOADS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && allowedNames.has(entry.name))
+    .map((entry) => path.join(WINDOWS_DOWNLOADS_DIR, entry.name))
+    .filter((filePath) => {
+      try {
+        return fs.statSync(filePath).mtimeMs >= (notBeforeMs - 5000);
+      } catch {
+        return false;
+      }
+    })
+    .sort((left, right) => {
+      try {
+        return fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs;
+      } catch {
+        return 0;
+      }
+    });
+}
+
+function moveBrowserSavedDownloadToProject(suggestedFilename: string, targetPath: string, notBeforeMs: number): boolean {
+  for (const candidatePath of collectBrowserSavedCandidates(suggestedFilename, notBeforeMs)) {
+    try {
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.renameSync(candidatePath, targetPath);
+      return true;
+    } catch {
+      try {
+        fs.copyFileSync(candidatePath, targetPath);
+        fs.rmSync(candidatePath, { force: true });
+        return true;
+      } catch {
+        // try next candidate
+      }
+    }
+  }
+  return false;
+}
+
+function removeBrowserSavedDuplicates(suggestedFilename: string, notBeforeMs: number): void {
+  for (const candidatePath of collectBrowserSavedCandidates(suggestedFilename, notBeforeMs)) {
+    try {
+      fs.rmSync(candidatePath, { force: true });
+    } catch {
+      // best effort only
+    }
+  }
+}
+
+function chunkImages(images: GeneratedImage[], size: number): GeneratedImage[][] {
+  const chunks: GeneratedImage[][] = [];
+  for (let index = 0; index < images.length; index += size) {
+    chunks.push(images.slice(index, index + size));
+  }
+  return chunks;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -178,6 +292,13 @@ function sortNewestFirst(images: GeneratedImage[]): GeneratedImage[] {
 
 function getCurrentBatchMediaNames(session: SessionState): Set<string> {
   const set = new Set<string>();
+  for (const batch of session.active_batches ?? []) {
+    for (const item of batch.rendered_media ?? []) {
+      if (item?.media_name) {
+        set.add(item.media_name);
+      }
+    }
+  }
   for (const item of session.last_render_batch?.rendered_media ?? []) {
     if (item?.media_name) {
       set.add(item.media_name);
@@ -198,16 +319,54 @@ function getCurrentBatchMediaNames(session: SessionState): Set<string> {
 
 function getCurrentBatchTargets(session: SessionState): Map<string, CurrentBatchTarget> {
   const map = new Map<string, CurrentBatchTarget>();
+  for (const batch of session.active_batches ?? []) {
+    for (const item of batch.rendered_media ?? []) {
+      if (item?.media_name) {
+        map.set(item.media_name, {
+          media_name: item.media_name,
+          prompt_id: item.prompt_id ?? null,
+          href: item.href ?? null,
+          tile_id: item.tile_id ?? null,
+        });
+      }
+    }
+  }
   for (const item of session.last_render_batch?.rendered_media ?? []) {
     if (item?.media_name) {
       map.set(item.media_name, {
         media_name: item.media_name,
+        prompt_id: item.prompt_id ?? null,
         href: item.href ?? null,
         tile_id: item.tile_id ?? null,
       });
     }
   }
   return map;
+}
+
+function inferSeriesSlotFromSuggestedFilename(suggestedFilename: string | undefined): string | null {
+  const stem = String(suggestedFilename ?? "").toLowerCase();
+  if (!stem) {
+    return null;
+  }
+  if (stem.includes("wide_establishing")) return "16A_establishing";
+  if (stem.includes("horizontal_close-up_detail") || stem.includes("horizontal_close_up_detail")) return "16B_detail";
+  if (stem.includes("overhead_or_scale")) return "16C_scale";
+  if (stem.includes("alternate_wide_demographic") || stem.includes("alternate_wide_mood")) return "16D_alt";
+  if (stem.includes("centered_square_hero") || stem.includes("centered_square_portrait") || stem.includes("centered_square_collaboration")) return "1A_iconic";
+  if (stem.includes("extreme_square_close-up") || stem.includes("extreme_square_close_up")) return "1B_variation";
+  if (
+    stem.includes("top-down_square")
+    || stem.includes("top_down_square")
+    || stem.includes("flat-lay_square")
+    || stem.includes("flat_lay_square")
+    || stem.includes("top-down_or_flat-lay")
+    || stem.includes("top_down_or_flat_lay")
+    || stem.includes("top-down_or_flat_lay")
+    || stem.includes("top_down_or_flat-lay")
+  ) return "1C_closeup";
+  if (stem.includes("square_alternate_demographic") || stem.includes("square_alternate")) return "1D_isolated";
+  return null;
 }
 
 function getSessionRunBaseline(session: SessionState): Set<string> {
@@ -315,27 +474,31 @@ function queueFifoPrepare(savedPath: string): void {
   ).unref();
 }
 
-function resolvePromptId(session: SessionState, mediaName: string): number | null {
-  for (const batch of session.active_batches ?? []) {
-    for (const item of batch.rendered_media ?? []) {
-      if (item?.media_name === mediaName && typeof item.prompt_id === "number") {
-        return item.prompt_id;
-      }
-    }
+function removeImageAndSidecar(filePath: string | null | undefined): void {
+  const target = String(filePath ?? "").trim();
+  if (!target) {
+    return;
   }
-  for (const item of session.last_render_batch?.rendered_media ?? []) {
-    if (item?.media_name === mediaName && typeof item.prompt_id === "number") {
-      return item.prompt_id;
-    }
+  try {
+    fs.rmSync(target, { force: true });
+  } catch {
+    // best effort only
   }
-  return null;
+  try {
+    const sidecarPath = path.join(path.dirname(target), `${path.parse(target).name}.metadata.json`);
+    fs.rmSync(sidecarPath, { force: true });
+  } catch {
+    // best effort only
+  }
 }
 
-function writeAiSidecarIfPossible(session: SessionState, image: GeneratedImage, savedPath: string, downloadedAt: string): void {
-  const promptId = resolvePromptId(session, image.mediaName);
+function writeAiSidecarIfPossible(session: SessionState, image: GeneratedImage, savedPath: string, suggestedFilename: string, downloadedAt: string): number | null {
+  const promptId = resolvePromptIdForDownload(session, image.mediaName, suggestedFilename, {
+    downloadedAt,
+  });
   if (promptId == null) {
     appendLog(`AI sidecar deferred for ${image.mediaName}: prompt_id not found in session batch state.`);
-    return;
+    return null;
   }
   const payload = buildAiMetadataContext({
     imagePath: savedPath,
@@ -346,13 +509,32 @@ function writeAiSidecarIfPossible(session: SessionState, image: GeneratedImage, 
   });
   const sidecarPath = path.join(path.dirname(savedPath), `${path.parse(savedPath).name}.metadata.json`);
   writeJson(sidecarPath, payload);
+  appendLog(`AI sidecar written immediately for ${image.mediaName} using prompt ${promptId}.`);
+  return promptId;
 }
 
 function markDownloaded(session: SessionState, image: GeneratedImage, saved: SavedDownload, note: string): void {
   const downloaded = Array.isArray(session.downloaded_images) ? session.downloaded_images : [];
   const downloadedAt = jsonTimestamp();
+  const promptId = writeAiSidecarIfPossible(session, image, saved.savedPath, saved.suggestedFilename, downloadedAt);
+  const existingIndex = downloaded.findIndex((item) => item.media_name === image.mediaName);
+  if (existingIndex >= 0) {
+    const existing = downloaded[existingIndex];
+    const existingMode = String(existing.download_mode ?? "");
+    const shouldReplace = existingMode !== "2K" && saved.mode === "2K";
+    if (!shouldReplace) {
+      appendLog(`Skipping duplicate download record for ${image.mediaName}; existing mode=${existingMode || "unknown"}, incoming mode=${saved.mode}.`);
+      removeImageAndSidecar(saved.savedPath);
+      return;
+    }
+    removeImageAndSidecar(existing.saved_path);
+    downloaded.splice(existingIndex, 1);
+    appendLog(`Replacing prior ${existingMode || "unknown"} record for ${image.mediaName} with ${saved.mode}.`);
+  }
+
   downloaded.push({
     media_name: image.mediaName,
+    prompt_id: promptId,
     saved_path: saved.savedPath,
     suggested_filename: saved.suggestedFilename,
     download_attempt: saved.attempt,
@@ -365,7 +547,6 @@ function markDownloaded(session: SessionState, image: GeneratedImage, saved: Sav
   });
   session.downloaded_images = downloaded;
   session.images_downloaded_count = downloaded.length;
-  writeAiSidecarIfPossible(session, image, saved.savedPath, downloadedAt);
   if (shouldQueueFifoPrepare(session)) {
     queueFifoPrepare(saved.savedPath);
     appendLog(`Queued FIFO prepare for ${image.mediaName} -> ${saved.savedPath}`);
@@ -374,12 +555,24 @@ function markDownloaded(session: SessionState, image: GeneratedImage, saved: Sav
 
 async function submitPass(
   page: Page,
+  session: SessionState,
   images: GeneratedImage[],
   mode: "2K" | "1X",
   attempt: number,
 ): Promise<Map<string, SavedDownload>> {
   const expected = images.slice();
   const expectedByMedia = new Map(expected.map((image) => [image.mediaName, image]));
+  const currentBatchTargets = getCurrentBatchTargets(session);
+  const descriptionSeriesSlots = readDescriptionSeriesSlots();
+  const expectedBySeriesSlot = new Map<string, GeneratedImage>();
+  for (const image of expected) {
+    const promptId = currentBatchTargets.get(image.mediaName)?.prompt_id;
+    const seriesSlot = typeof promptId === "number" ? descriptionSeriesSlots.get(promptId) : null;
+    if (seriesSlot) {
+      expectedBySeriesSlot.set(seriesSlot, image);
+    }
+  }
+  const requestStartedAtByMedia = new Map<string, number>();
   const completed = new Map<string, SavedDownload>();
   let eventIndex = 0;
 
@@ -397,6 +590,13 @@ async function submitPass(
         current = undefined;
       }
     }
+    const suggestedFilename = download.suggestedFilename();
+    if (!current) {
+      const inferredSeriesSlot = inferSeriesSlotFromSuggestedFilename(suggestedFilename);
+      if (inferredSeriesSlot) {
+        current = expectedBySeriesSlot.get(inferredSeriesSlot);
+      }
+    }
     if (!current) {
       current = expected[eventIndex];
       eventIndex += 1;
@@ -404,20 +604,24 @@ async function submitPass(
     if (!current) {
       return;
     }
-    const suggestedFilename = download.suggestedFilename();
     const savedPath = buildTargetPath(suggestedFilename, current.mediaName, mode);
+    const requestStartedAt = requestStartedAtByMedia.get(current.mediaName) ?? Date.now();
     try {
       await download.saveAs(savedPath);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendLog(`${mode} download saveAs failed for ${current.mediaName} on attempt ${attempt}: ${message}`);
-      return;
+      if (!moveBrowserSavedDownloadToProject(suggestedFilename, savedPath, requestStartedAt)) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendLog(`${mode} download saveAs failed for ${current.mediaName} on attempt ${attempt}: ${message}`);
+        return;
+      }
+      appendLog(`${mode} download recovered from browser download folder for ${current.mediaName} on attempt ${attempt}.`);
     }
     const failure = await download.failure();
     if (failure) {
       appendLog(`${mode} download reported failure for ${current.mediaName} on attempt ${attempt}: ${failure}`);
       return;
     }
+    removeBrowserSavedDuplicates(suggestedFilename, requestStartedAt);
     completed.set(current.mediaName, {
       image: current,
       mode,
@@ -437,6 +641,7 @@ async function submitPass(
         appendLog(`Could not open download menu for ${image.mediaName} during ${mode} attempt ${attempt}.`);
         continue;
       }
+      requestStartedAtByMedia.set(image.mediaName, Date.now());
       const clicked = await clickDownloadOption(page, mode);
       if (!clicked) {
         appendLog(`Could not click ${mode} option for ${image.mediaName} during attempt ${attempt}.`);
@@ -480,7 +685,10 @@ async function main(): Promise<void> {
   await page.bringToFront();
 
   const allImages = sortNewestFirst(await getGeneratedImages(page));
-  const downloadedSet = new Set((session.downloaded_images ?? []).map((item) => item.media_name));
+  const downloadedSet = new Set([
+    ...(session.downloaded_images ?? []).map((item) => item.media_name),
+    ...getDownloadedMediaFromProjectFiles(),
+  ]);
   const sessionRunBaseline = getSessionRunBaseline(session);
   const currentBatchMediaNames = getCurrentBatchMediaNames(session);
   const currentBatchTargets = getCurrentBatchTargets(session);
@@ -518,30 +726,32 @@ async function main(): Promise<void> {
     appendLog(`Preflight exact download target media=${image.mediaName} tile=${image.tileId ?? "null"} href=${image.href ?? "null"} gridTop=${image.top} gridLeft=${image.left}`);
   }
 
-  const pass1 = await submitPass(page, pending, "2K", 1);
-  const missingAfterPass1 = pending.filter((image) => !pass1.has(image.mediaName));
-  for (const image of missingAfterPass1) {
-    appendLog(`2K attempt 1 produced no saved download for ${image.mediaName}.`);
-  }
+  const allSaved: SavedDownload[] = [];
+  const finalMissing: GeneratedImage[] = [];
 
-  const pass2 = missingAfterPass1.length ? await submitPass(page, missingAfterPass1, "2K", 2) : new Map<string, SavedDownload>();
-  const missingAfterPass2 = missingAfterPass1.filter((image) => !pass2.has(image.mediaName));
-  for (const image of missingAfterPass2) {
-    appendLog(`2K attempt 2 produced no saved download for ${image.mediaName}. Falling back to 1X.`);
-  }
+  for (const chunk of chunkImages(pending, MAX_2K_BATCH_SIZE)) {
+    const pass1 = await submitPass(page, session, chunk, "2K", 1);
+    const missingAfterPass1 = chunk.filter((image) => !pass1.has(image.mediaName));
+    for (const image of missingAfterPass1) {
+      appendLog(`2K attempt 1 produced no saved download for ${image.mediaName}.`);
+    }
 
-  const fallbackPass = missingAfterPass2.length ? await submitPass(page, missingAfterPass2, "1X", 1) : new Map<string, SavedDownload>();
-  const finalMissing = missingAfterPass2.filter((image) => !fallbackPass.has(image.mediaName));
-  for (const image of finalMissing) {
-    appendLog(`1X fallback also failed for ${image.mediaName}.`);
-    session.errors = [...(session.errors ?? []), `1X fallback failed for ${image.mediaName}.`];
-  }
+    const pass2 = missingAfterPass1.length ? await submitPass(page, session, missingAfterPass1, "2K", 2) : new Map<string, SavedDownload>();
+    const missingAfterPass2 = missingAfterPass1.filter((image) => !pass2.has(image.mediaName));
+    for (const image of missingAfterPass2) {
+      appendLog(`2K attempt 2 produced no saved download for ${image.mediaName}. Falling back to 1X.`);
+    }
 
-  const allSaved = [
-    ...pass1.values(),
-    ...pass2.values(),
-    ...fallbackPass.values(),
-  ];
+    const fallbackPass = missingAfterPass2.length ? await submitPass(page, session, missingAfterPass2, "1X", 1) : new Map<string, SavedDownload>();
+    const chunkMissing = missingAfterPass2.filter((image) => !fallbackPass.has(image.mediaName));
+    for (const image of chunkMissing) {
+      appendLog(`1X fallback also failed for ${image.mediaName}.`);
+      session.errors = [...(session.errors ?? []), `1X fallback failed for ${image.mediaName}.`];
+    }
+
+    allSaved.push(...pass1.values(), ...pass2.values(), ...fallbackPass.values());
+    finalMissing.push(...chunkMissing);
+  }
 
   for (const saved of allSaved) {
     const note = saved.mode === "1X"

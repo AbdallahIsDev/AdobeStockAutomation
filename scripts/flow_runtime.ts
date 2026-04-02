@@ -13,6 +13,9 @@ async function main(): Promise<void> {
     case "submit-batch":
       await import("./flow/flow_batch_submit_worker");
       return;
+    case "run-session":
+      await import("./flow/flow_run_session");
+      return;
     case "download":
     case "download-nonblocking":
       await import("./flow/flow_nonblocking_download_worker");
@@ -29,9 +32,15 @@ async function main(): Promise<void> {
     case "recover-failures":
       await import("./flow/flow_recover_failures");
       return;
+    case "repair-sidecars":
+      await import("./flow/flow_repair_sidecars");
+      return;
+    case "reconcile-downloads":
+      await import("./flow/flow_reconcile_downloads");
+      return;
     default:
       throw new Error(
-        "Usage: --action=probe|submit-batch|download|download-nonblocking|download-recovery|wait-renders|retry-failed|recover-failures",
+        "Usage: --action=probe|submit-batch|run-session|download|download-nonblocking|download-recovery|wait-renders|retry-failed|recover-failures|repair-sidecars|reconcile-downloads",
       );
   }
 }

@@ -8,4 +8,5 @@ $ErrorActionPreference = "Stop"
 
 & (Join-Path $PSScriptRoot "set_session_mode.ps1") -Mode stage_only -Stage $Stage
 
-Write-Output "Stage-only session ready for $Stage."
+Write-Output "Stage-only session initialized for $Stage."
+Write-Output "This command only prepares runtime state. It does not execute the stage workload by itself."

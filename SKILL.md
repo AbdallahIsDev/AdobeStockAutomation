@@ -106,6 +106,7 @@ Spawn the next stage only after the current stage has signaled success and that 
 
 2. Image Creation
    Command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage image_creation
+   Then run: npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=run-session
    File: instructions\02_IMAGE_CREATION.md
    Verify before continuing: images are written to downloads\[date]\ and each image has a matching .metadata.json sidecar.
 
@@ -212,11 +213,12 @@ For full-system runs, the orchestrator should think in this exact pattern:
    Assigned file: instructions\01_TREND_RESEARCH.md
    Session command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage trend_research
    Internal workflow: Planner -> Generator -> Evaluator
-   Completion check: data\trend_data.json exists and contains ranked trends
+   Completion check: data\trend_data.json exists, contains ranked trends, and matches the current session date
 
 2. Spawn Image Creation Agent
    Assigned file: instructions\02_IMAGE_CREATION.md
    Session command: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage image_creation
+   Primary runtime command: npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=run-session
    Internal workflow: Planner -> Generator -> Evaluator
    Completion check: downloads\[date]\ contains images and each image has a matching .metadata.json sidecar
    Exception handling: if Flow shows visible failed tiles or a creation exception that the current batch state did not capture cleanly, call `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=recover-failures` before attempting manual UI repair
@@ -257,19 +259,26 @@ Rules:
 - do not execute from memory alone; always open the relevant execution file(s)
 - `instructions\STOCK_SUCCESS_REPORT.md` is the strategy reference
 - `instructions\01_TREND_RESEARCH.md` and `instructions\02_IMAGE_CREATION.md` are separate on purpose
+- `session_runtime.ps1 -Action stage -Stage trend_research` only initializes File 01 runtime state; it must not be treated as completed live research by itself
 - if a stage file requires sub-agents, do not skip them
 - use the exact file-defined workflow for spawned agents; do not invent new agent instructions unless the file itself requires a runtime variable like date or stage name
 - every stage must run through Planner -> Generator -> Evaluator automatically; do not wait for a user prompt to add QA
 - GitHub is the recovery path for tracked code/docs; `project_backups/` is the recovery path for local runtime state that Git does not protect
 - File 02 must build `descriptions.json` dynamically from the ranked trend list with `session_runtime.ps1 -Action build-descriptions`; it may never assume a fixed 32-prompt inventory
+- If the ranked trend list is too short to fill the 64-image session budget, File 02 must continue with loop variants of the strongest ranked trends instead of stopping at 32 images
 - `session_runtime.ps1 -Action build-descriptions` is a session-start step only; do not rerun it after a live generation session has already started
 - File 02 must use the rolling nonblocking download path and FIFO background prepare by default; do not wait for all four images before downloading ready ones
+- File 02 should normally be executed through `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=run-session`, which must keep the loop alive until the session cap or prompt exhaustion instead of stopping after one pass
+- File 02 `run-session` must stay single-controller; if another `run-session` is already active for the same project session, do not start a duplicate controller
+- if File 02 finds already-downloaded session images missing `.metadata.json` sidecars, it must repair them first with `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=repair-sidecars` before continuing generation
+- if File 02 drift already created duplicate prompt-slot outputs, browser-spill files, or mismatched sidecars, repair them with `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=reconcile-downloads` before continuing generation
 - File 02 must treat 64 images as a per-session cap, not a per-day cap. Starting a new session later the same day must provide a fresh 64-image budget.
 - File 02 must treat 32 wide and 32 square as the per-session aspect caps and carry extra trends into the next session instead of dropping them
 - File 02 must treat `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download` as the default fully parallel downloader and reserve `--action=download-recovery` for slower cleanup/recovery passes
 - do not block on `--wait-for-outcomes` between prompt groups; the next group can be queued while the downloader harvests the newest rendered images from already-running groups
 - File 02 must treat the run as an active session window: ignore all images that existed before the run baseline and only download renders created after that baseline
 - File 02 must not let one failed render block its successful siblings; retry failed prompts through the runtime and keep the rest of the pipeline moving
+- File 02 must cap Flow `2K` upscale/download requests to 4 concurrent images per pass; recover browser-saved files from the Windows downloads folder instead of re-requesting the same media when `saveAs` fails
 - `instructions\03_IMAGE_UPSCALER.md` must generate full metadata for manual images before upscale
 - `instructions\03_IMAGE_UPSCALER.md` batch mode must process pending session work in 16-image chunks
 - `instructions\04_METADATA_OPTIMIZER.md` should apply sidecars for all pipeline images and only use visual rebuild for outside-system Adobe uploads

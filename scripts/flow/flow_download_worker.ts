@@ -12,6 +12,7 @@ import {
 import { quarantineFailedAsset } from "../common/failed_assets";
 import { buildAiMetadataContext } from "../common/ai_metadata";
 import { appendAutomationLog } from "../common/logging";
+import { resolvePromptIdForDownload } from "../common/prompt_resolution";
 import {
   AUTOMATION_LOG_PATH,
   DATA_DIR,
@@ -542,8 +543,10 @@ async function performDownloadAttempt(
 function markDownloaded(session: SessionState, image: GeneratedImage, result: Extract<DownloadAttemptResult, { ok: true }>, note: string | null): void {
   const downloaded = Array.isArray(session.downloaded_images) ? session.downloaded_images : [];
   const downloadedAt = timestampIso();
+  const promptId = writeAiSidecarIfPossible(session, image.mediaName, result.savedPath, result.suggestedFilename, downloadedAt);
   downloaded.push({
     media_name: image.mediaName,
+    prompt_id: promptId,
     tile_id: image.tileId,
     href: image.href,
     project_id: session.current_project_id ?? null,
@@ -556,7 +559,6 @@ function markDownloaded(session: SessionState, image: GeneratedImage, result: Ex
   });
   session.downloaded_images = downloaded;
   session.images_downloaded_count = downloaded.length;
-  writeAiSidecarIfPossible(session, image.mediaName, result.savedPath, downloadedAt);
   if (session.post_download_policy === "fifo_upscale_prepare") {
     spawn(
       "powershell",
@@ -580,20 +582,13 @@ function markDownloaded(session: SessionState, image: GeneratedImage, result: Ex
   }
 }
 
-function resolvePromptId(session: SessionState, mediaName: string): number | null {
-  const renderedMedia = [
-    ...((session.active_batches ?? []).flatMap((batch) => batch.rendered_media ?? [])),
-    ...(session.last_render_batch?.rendered_media ?? []),
-  ];
-  const match = renderedMedia.find((item) => item?.media_name === mediaName);
-  return typeof match?.prompt_id === "number" ? match.prompt_id : null;
-}
-
-function writeAiSidecarIfPossible(session: SessionState, mediaName: string, savedPath: string, downloadedAt: string): void {
-  const promptId = resolvePromptId(session, mediaName);
+function writeAiSidecarIfPossible(session: SessionState, mediaName: string, savedPath: string, suggestedFilename: string, downloadedAt: string): number | null {
+  const promptId = resolvePromptIdForDownload(session, mediaName, suggestedFilename, {
+    downloadedAt,
+  });
   if (promptId == null) {
     appendLog(`${timestampIso()} AI sidecar deferred for ${mediaName}: prompt_id not found in batch state.`);
-    return;
+    return null;
   }
   const payload = buildAiMetadataContext({
     imagePath: savedPath,
@@ -603,6 +598,8 @@ function writeAiSidecarIfPossible(session: SessionState, mediaName: string, save
     modelUsed: session.current_model ?? "Nano Banana 2 / Flow",
   });
   writeJsonFile(path.join(path.dirname(savedPath), `${path.parse(savedPath).name}.metadata.json`), payload);
+  appendLog(`${timestampIso()} AI sidecar written immediately for ${mediaName} using prompt ${promptId}.`);
+  return promptId;
 }
 
 async function main(): Promise<void> {

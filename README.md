@@ -169,10 +169,11 @@ PROJECT_ROOT\
 - `scripts/session_runtime.ps1 -Action build-descriptions`
   Builds the dynamic prompt inventory from `trend_data.json`, applies the 64-image session cap, and carries extra trends forward to the next run.
   This is a session-start step and should not be rerun after a live generation session has already started.
+  It also refuses stale `trend_data.json`; restored or older trend output must not be reused silently for a new session.
 - `scripts/upscale_runtime.ps1`
   Runs FIFO single-image prepare or the normal batch upscale pass from one command surface.
 - `scripts/flow_runtime.ts`
-  Unified public entrypoint for Flow probe, submit, default parallel download, recovery download, visible-failure recovery, and render-wait actions.
+  Unified public entrypoint for Flow probe, submit, full File 02 session-loop control, default parallel download, recovery download, visible-failure recovery, and render-wait actions.
 - `data/session_state.json`
   Current workflow checkpoint across stages.
 - `data/image_registry.json`
@@ -208,13 +209,23 @@ If ExifTool is installed outside PATH, set `data\upscaler_state.json -> exiftool
 - That 64-image limit is per session, not per day. Starting a new session later the same day should give a fresh 64-image budget.
 - File 02 tracks one active session run baseline so old Flow project images stay ignored even when multiple new batches are in flight.
 - File 02 must retry failed prompts instead of leaving successful sibling renders blocked behind incomplete batches.
+- File 02 treats visible failed tiles, generic failed renders, and long-running unresolved renders as recoverable runtime failures; they must be retried or recovered instead of freezing the rolling loop.
+- File 02 downloads successful sibling renders immediately even when other images from the same batch fail or time out.
 - File 02 uses FIFO post-download prepare by default: download -> prompt-context sidecar -> queue upscale -> continue immediately.
 - File 02 must never derive AI metadata from the downloaded filename or suggested filename.
+- File 02 must keep `2K` requests bounded to 4 concurrent Flow upscale/download jobs per pass; do not flood Flow with more simultaneous `2K` requests than that.
+- If Chrome saves a file into `C:\Users\11\Downloads` while Playwright `saveAs` fails, File 02 must recover that file into the project download folder instead of re-requesting the same media blindly.
 - File 03 may create a missing AI sidecar shell only as a rebuild marker; it must not invent final metadata from the filename.
 - File 02 builds `descriptions.json` dynamically from the actual ranked trend list; it must never assume a fixed total like 32 prompts.
+- If the ranked trend list is shorter than the 64-image session budget, File 02 must extend it with additional loop variants of the strongest ranked trends instead of stopping early.
 - File 02 queues at most 8 trends per session and stores overflow trends as carry-forward work for the next session.
 - `npx --yes tsx scripts/flow_runtime.ts --action=download` is the default fully parallel downloader; `--action=download-recovery` is the slower recovery-only sweep.
+- `npx --yes tsx scripts/flow_runtime.ts --action=run-session` is the preferred File 02 controller because it keeps the submit/download/retry/recovery loop running until the session cap or prompt exhaustion.
+- `run-session` now enforces a single-controller lock so multiple agents cannot submit the same prompt range twice inside one live session.
+- `run-session` may submit a partial recovery subset from an older 4-prompt group when only some prompt slots are missing after a drift cleanup pass.
 - `npx --yes tsx scripts/flow_runtime.ts --action=recover-failures` is the scripted repair path for visible Flow failed tiles that escaped normal batch-state handling.
+- `npx --yes tsx scripts/flow_runtime.ts --action=repair-sidecars` repairs missing AI `.metadata.json` sidecars for already-downloaded session images before the pipeline continues.
+- `npx --yes tsx scripts/flow_runtime.ts --action=reconcile-downloads` cleans duplicate/download-spill drift, keeps one canonical file per prompt slot, and resets stranded prompt slots back to `ready` for a clean rerun.
 - File 03 batch upscale is a sync/catch-up pass only for images not already marked `upscaled = true`.
 - File 03 batch upscale runs in 16-image chunks so a full 64-image session resolves in four clean upscale batches.
 - File 03 embeds XMP title, keywords, and description into every final upscaled image before upload.
@@ -233,6 +244,7 @@ If ExifTool is installed outside PATH, set `data\upscaler_state.json -> exiftool
 - `logs\automation.log` automatically prunes lines older than 3 days whenever active runtime scripts append new entries.
 - Failed-asset `.failure.json` files are auto-created by the Flow and Upscale runtime commands; they are not written manually in the markdown instructions.
 - `bootstrap` is only for a truly fresh project with no historical runtime state; if `data/` is missing but `downloads/` or `logs/` already exist, use `session_runtime.ps1 -Action reconcile` instead of recreating empty JSON.
+- `session_runtime.ps1 -Action stage -Stage trend_research` only initializes File 01 session state. It does not count as live trend research by itself.
 
 ## Current Layout
 

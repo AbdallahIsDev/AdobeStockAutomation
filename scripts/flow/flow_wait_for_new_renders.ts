@@ -29,6 +29,7 @@ type SessionState = {
 };
 
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
+const WAIT_TIMEOUT_MINUTES = 6;
 
 function readJson<T>(filePath: string, fallback: T): T {
   try {
@@ -64,6 +65,28 @@ async function countPolicyViolationTiles(page: import("playwright").Page): Promi
   });
 }
 
+async function countVisibleFailureSignals(page: import("playwright").Page): Promise<number> {
+  return page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll("button,[role=\"button\"]")) as HTMLElement[];
+    let retryCount = 0;
+    let reusePromptCount = 0;
+    for (const el of buttons) {
+      const text = `${el.textContent || ""} ${el.getAttribute("aria-label") || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 90 || rect.height > 70) {
+        continue;
+      }
+      if (text.includes("retry")) {
+        retryCount += 1;
+      }
+      if (text.includes("reuse prompt")) {
+        reusePromptCount += 1;
+      }
+    }
+    return Math.max(retryCount, reusePromptCount);
+  });
+}
+
 async function main(): Promise<void> {
   const { expected } = parseArgs();
   if (!(await isDebugPortReady(9222))) {
@@ -82,9 +105,11 @@ async function main(): Promise<void> {
 
     await page.bringToFront();
     const baselinePolicyViolations = await countPolicyViolationTiles(page);
-    const deadline = Date.now() + (20 * 60 * 1000);
+    const baselineFailureSignals = await countVisibleFailureSignals(page);
+    const deadline = Date.now() + (WAIT_TIMEOUT_MINUTES * 60 * 1000);
     let fresh = [] as Array<{ media_name: string; href: string | null; tile_id: string | null }>;
-    let failedCount = 0;
+    let policyFailureCount = 0;
+    let visibleFailureCount = 0;
 
     while (Date.now() < deadline) {
       const rendered = await page.evaluate((selector) => {
@@ -110,8 +135,9 @@ async function main(): Promise<void> {
         .filter((item) => !known.has(item.media_name))
         .filter((item) => !baseline.size || !baseline.has(item.media_name))
         .slice(0, expected);
-      failedCount = Math.max(0, (await countPolicyViolationTiles(page)) - baselinePolicyViolations);
-      if (fresh.length + failedCount >= expected) {
+      policyFailureCount = Math.max(0, (await countPolicyViolationTiles(page)) - baselinePolicyViolations);
+      visibleFailureCount = Math.max(0, (await countVisibleFailureSignals(page)) - baselineFailureSignals);
+      if (fresh.length + Math.max(policyFailureCount, visibleFailureCount) >= expected) {
         break;
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -119,7 +145,45 @@ async function main(): Promise<void> {
 
     const aspect = session.current_aspect_ratio ?? "1:1";
     const failedField = aspect === "16:9" ? "current_16x9_failed" : "current_1x1_failed";
-    const failedPromptIds = (session.last_render_batch?.prompt_ids ?? []).slice(fresh.length, fresh.length + failedCount);
+    policyFailureCount = Math.max(0, (await countPolicyViolationTiles(page)) - baselinePolicyViolations);
+    visibleFailureCount = Math.max(0, (await countVisibleFailureSignals(page)) - baselineFailureSignals);
+    const classifiedFailureCount = Math.max(policyFailureCount, visibleFailureCount);
+    const failedPromptIds = [] as number[];
+    const failedPrompts = [] as Array<{ prompt_id: number | null; reason: string; message: string }>;
+    const promptIds = session.last_render_batch?.prompt_ids ?? [];
+    let failureStartIndex = fresh.length;
+
+    for (const promptId of promptIds.slice(failureStartIndex, failureStartIndex + policyFailureCount)) {
+      failedPromptIds.push(promptId);
+      failedPrompts.push({
+        prompt_id: promptId,
+        reason: "policy_violation",
+        message: "This generation might violate our policies. Please try a different prompt or send feedback.",
+      });
+    }
+    failureStartIndex += policyFailureCount;
+
+    const genericFailureCount = Math.max(0, classifiedFailureCount - policyFailureCount);
+    for (const promptId of promptIds.slice(failureStartIndex, failureStartIndex + genericFailureCount)) {
+      failedPromptIds.push(promptId);
+      failedPrompts.push({
+        prompt_id: promptId,
+        reason: "render_failed",
+        message: "Flow reported a failed render tile. Retry or reuse prompt is required.",
+      });
+    }
+    failureStartIndex += genericFailureCount;
+
+    if (Date.now() >= deadline && fresh.length + failedPrompts.length < expected) {
+      for (const promptId of promptIds.slice(failureStartIndex)) {
+        failedPromptIds.push(promptId);
+        failedPrompts.push({
+          prompt_id: promptId,
+          reason: "render_timeout",
+          message: `Render did not resolve within ${WAIT_TIMEOUT_MINUTES} minutes and was marked for retry.`,
+        });
+      }
+    }
     if (aspect === "16:9") {
       session.current_16x9_rendered = fresh.map((item) => item.media_name);
     } else {
@@ -135,17 +199,13 @@ async function main(): Promise<void> {
         href: item.href,
         tile_id: item.tile_id,
       })),
-      failed_prompts: failedPromptIds.map((promptId) => ({
-        prompt_id: promptId,
-        reason: "policy_violation",
-        message: "This generation might violate our policies. Please try a different prompt or send feedback.",
-      })),
+      failed_prompts: failedPrompts,
       captured_at: jsonTimestamp(),
     };
     writeJson(SESSION_STATE_PATH, session);
     appendLog(`Waiter captured ${fresh.length} fresh render(s) for aspect ${aspect}: ${fresh.map((item) => item.media_name).join(", ")}.`);
     if (failedPromptIds.length) {
-      appendLog(`Waiter also classified ${failedPromptIds.length} prompt-violation failure(s) for aspect ${aspect}: ${failedPromptIds.join(", ")}.`);
+      appendLog(`Waiter also classified ${failedPromptIds.length} failed render(s) for aspect ${aspect}: ${failedPrompts.map((item) => `${item.prompt_id}:${item.reason}`).join(", ")}.`);
     }
   } finally {
     await browser.close();

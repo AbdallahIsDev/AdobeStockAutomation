@@ -7,6 +7,7 @@ type Description = {
   id: number;
   trend_id: number;
   trend_topic: string;
+  loop_index?: number;
   series_slot: string;
   aspect_ratio: string;
   prompt_text: string;
@@ -233,7 +234,7 @@ export function buildAiMetadataContext(context: MetadataContext): Record<string,
     aspect_ratio: description.aspect_ratio,
     trend_topic: description.trend_topic,
     trend_category: trend?.category ?? null,
-    loop_index: 0,
+    loop_index: description.loop_index ?? 1,
     adobe_stock_metadata: {
       title,
       title_char_count: title.length,

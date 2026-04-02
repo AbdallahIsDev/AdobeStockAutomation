@@ -54,6 +54,15 @@ Full system: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\sessi
 Stage only:  powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage trend_research
 ```
 
+Important:
+
+```text
+- the stage command only initializes runtime state for File 01
+- it does not count as completed research by itself
+- File 01 is complete only when fresh ranked output is written to data\trend_data.json for the current session date
+- File 02 must refuse stale trend_data.json instead of silently reusing restored or older research
+```
+
 State safety rule:
 
 ```text

@@ -90,6 +90,7 @@ const TERMINAL_DESCRIPTION_STATUSES = new Set([
 
 const PROMPT_SELECTOR = "[role=\"textbox\"][data-slate-editor=\"true\"]";
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
+const WAIT_TIMEOUT_MINUTES = 6;
 
 function readJson<T>(filePath: string, fallback: T): T {
   try {
@@ -252,16 +253,20 @@ async function waitForBatchOutcomes(
   promptIds: number[],
   existingMedia: Set<string>,
   baselinePolicyViolations: number,
+  baselineFailureSignals: number,
 ): Promise<{
   newImages: GeneratedImage[];
-  failedPromptIds: number[];
+  failedPromptOutcomes: Array<{ prompt_id: number; reason: string; message: string }>;
 }> {
-  const deadline = Date.now() + (20 * 60 * 1000);
+  const deadline = Date.now() + (WAIT_TIMEOUT_MINUTES * 60 * 1000);
   let policyViolationCount = 0;
+  let visibleFailureCount = 0;
   while (Date.now() < deadline) {
     const freshImages = sortVisualNewestFirst(await getGeneratedImages(page)).filter((image) => !existingMedia.has(image.mediaName));
     policyViolationCount = Math.max(0, (await countPolicyViolationTiles(page)) - baselinePolicyViolations);
-    if (freshImages.length + policyViolationCount >= promptIds.length) {
+    visibleFailureCount = Math.max(0, (await countVisibleFailureSignals(page)) - baselineFailureSignals);
+    const knownFailureCount = Math.max(policyViolationCount, visibleFailureCount);
+    if (freshImages.length + knownFailureCount >= promptIds.length) {
       break;
     }
     await sleep(2000);
@@ -269,8 +274,42 @@ async function waitForBatchOutcomes(
 
   const allImages = sortVisualNewestFirst(await getGeneratedImages(page));
   const newImages = allImages.filter((image) => !existingMedia.has(image.mediaName)).slice(0, promptIds.length);
-  const failedPromptIds = promptIds.slice(newImages.length, newImages.length + policyViolationCount);
-  return { newImages, failedPromptIds };
+  policyViolationCount = Math.max(0, (await countPolicyViolationTiles(page)) - baselinePolicyViolations);
+  visibleFailureCount = Math.max(0, (await countVisibleFailureSignals(page)) - baselineFailureSignals);
+  const classifiedFailureCount = Math.max(policyViolationCount, visibleFailureCount);
+  const failedPromptOutcomes: Array<{ prompt_id: number; reason: string; message: string }> = [];
+  let failureStartIndex = newImages.length;
+
+  for (const promptId of promptIds.slice(failureStartIndex, failureStartIndex + policyViolationCount)) {
+    failedPromptOutcomes.push({
+      prompt_id: promptId,
+      reason: "policy_violation",
+      message: "This generation might violate our policies. Please try a different prompt or send feedback.",
+    });
+  }
+  failureStartIndex += policyViolationCount;
+
+  const genericFailureCount = Math.max(0, classifiedFailureCount - policyViolationCount);
+  for (const promptId of promptIds.slice(failureStartIndex, failureStartIndex + genericFailureCount)) {
+    failedPromptOutcomes.push({
+      prompt_id: promptId,
+      reason: "render_failed",
+      message: "Flow reported a failed render tile. Retry or reuse prompt is required.",
+    });
+  }
+  failureStartIndex += genericFailureCount;
+
+  if (Date.now() >= deadline && newImages.length + failedPromptOutcomes.length < promptIds.length) {
+    for (const promptId of promptIds.slice(failureStartIndex)) {
+      failedPromptOutcomes.push({
+        prompt_id: promptId,
+        reason: "render_timeout",
+        message: `Render did not resolve within ${WAIT_TIMEOUT_MINUTES} minutes and was marked for retry.`,
+      });
+    }
+  }
+
+  return { newImages, failedPromptOutcomes };
 }
 
 function sortVisualNewestFirst(images: GeneratedImage[]): GeneratedImage[] {
@@ -293,21 +332,77 @@ async function countPolicyViolationTiles(page: Page): Promise<number> {
   });
 }
 
+async function countVisibleFailureSignals(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll("button,[role=\"button\"]")) as HTMLElement[];
+    let retryCount = 0;
+    let reusePromptCount = 0;
+    for (const el of buttons) {
+      const text = `${el.textContent || ""} ${el.getAttribute("aria-label") || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 90 || rect.height > 70) {
+        continue;
+      }
+      if (text.includes("retry")) {
+        retryCount += 1;
+      }
+      if (text.includes("reuse prompt")) {
+        reusePromptCount += 1;
+      }
+    }
+    return Math.max(retryCount, reusePromptCount);
+  });
+}
+
 async function fillPrompt(page: Page, prompt: string): Promise<void> {
   const textbox = page.locator(PROMPT_SELECTOR).first();
-  await textbox.click({ timeout: 3000 });
-  await page.keyboard.press("Control+a");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.type(prompt, { delay: 0 });
-  await page.waitForFunction(
-    ({ selector, expected }) => {
-      const element = document.querySelector(selector) as HTMLElement | null;
-      if (!element) return false;
-      return (element.innerText || "").includes(expected.slice(0, 32));
-    },
-    { selector: PROMPT_SELECTOR, expected: prompt },
-    { timeout: 3000 },
-  );
+  await waitForElement(page, PROMPT_SELECTOR, 5000);
+
+  const waitForPromptEcho = async (timeout: number): Promise<boolean> => {
+    try {
+      await page.waitForFunction(
+        ({ selector, expected }) => {
+          const element = document.querySelector(selector) as HTMLElement | null;
+          if (!element) return false;
+          const text = (element.innerText || element.textContent || "").replace(/\s+/g, " ").trim();
+          return text.includes(expected.slice(0, 32));
+        },
+        { selector: PROMPT_SELECTOR, expected: prompt },
+        { timeout },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    await textbox.click({ timeout: 5000 });
+    await page.keyboard.press("Control+a").catch(() => undefined);
+    await page.keyboard.press("Backspace").catch(() => undefined);
+    await page.keyboard.insertText(prompt);
+    if (await waitForPromptEcho(8000)) {
+      return;
+    }
+
+    await textbox.evaluate((element, value) => {
+      const editable = element as HTMLElement;
+      editable.focus();
+      editable.textContent = value;
+      editable.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        composed: true,
+        data: value,
+        inputType: "insertText",
+      }));
+    }, prompt).catch(() => undefined);
+
+    if (await waitForPromptEcho(5000)) {
+      return;
+    }
+  }
+
+  throw new Error(`Prompt textbox did not reflect the submitted prompt text for: ${prompt.slice(0, 64)}`);
 }
 
 async function clickCreate(page: Page): Promise<void> {
@@ -399,6 +494,7 @@ async function main(): Promise<void> {
     const existingImages = sortVisualNewestFirst(await getGeneratedImages(page));
     const existingMedia = new Set(existingImages.map((image) => image.mediaName));
     const baselinePolicyViolations = await countPolicyViolationTiles(page);
+    const baselineFailureSignals = await countVisibleFailureSignals(page);
     if (!Array.isArray(session.run_baseline_media_names) || !session.run_baseline_media_names.length) {
       session.run_baseline_media_names = [...existingMedia];
     }
@@ -463,17 +559,19 @@ async function main(): Promise<void> {
       return;
     }
     const activePromptIds = promptsToSubmit.map((prompt) => prompt.id);
-    const firstPass = await waitForBatchOutcomes(page, activePromptIds, existingMedia, baselinePolicyViolations);
+    const firstPass = await waitForBatchOutcomes(page, activePromptIds, existingMedia, baselinePolicyViolations, baselineFailureSignals);
     let newImages = firstPass.newImages;
-    let failedPromptIds = firstPass.failedPromptIds;
+    let failedPrompts = firstPass.failedPromptOutcomes;
 
-    if (retryFailed && failedPromptIds.length) {
+    if (retryFailed && failedPrompts.length) {
+      const failedPromptIds = failedPrompts.map((item) => item.prompt_id);
       appendLog(`Retrying failed prompt ids ${failedPromptIds.join(", ")} at ${aspectRatio}.`);
       const retryDescriptions = failedPromptIds
         .map((id) => descriptionsById.get(id))
         .filter((item): item is Description => Boolean(item));
       const retryBaselineMedia = new Set((await getGeneratedImages(page)).map((image) => image.mediaName));
       const retryBaselinePolicyViolations = await countPolicyViolationTiles(page);
+      const retryBaselineFailureSignals = await countVisibleFailureSignals(page);
       for (const prompt of retryDescriptions) {
         await dismissToast(page);
         await fillPrompt(page, prompt.prompt_text);
@@ -481,20 +579,15 @@ async function main(): Promise<void> {
         await waitForPromptReset(page, prompt.prompt_text);
         appendLog(`Retry prompt ${prompt.id} submitted for ${prompt.series_slot} (${aspectRatio}).`);
       }
-      const retryPass = await waitForBatchOutcomes(page, failedPromptIds, retryBaselineMedia, retryBaselinePolicyViolations);
+      const retryPass = await waitForBatchOutcomes(page, failedPromptIds, retryBaselineMedia, retryBaselinePolicyViolations, retryBaselineFailureSignals);
       newImages = [...newImages, ...retryPass.newImages].slice(0, activePromptIds.length);
-      failedPromptIds = retryPass.failedPromptIds;
+      failedPrompts = retryPass.failedPromptOutcomes;
     }
 
     const renderedField = aspectRatio === "16:9" ? "current_16x9_rendered" : "current_1x1_rendered";
     session[renderedField] = newImages.map((image) => image.mediaName);
-    session[failedField] = failedPromptIds;
+    session[failedField] = failedPrompts.map((item) => item.prompt_id);
     session.current_step = "STEP_RENDERED_READY_FOR_DOWNLOAD";
-    const failedPrompts = failedPromptIds.map((promptId) => ({
-      prompt_id: promptId,
-      reason: "policy_violation",
-      message: "This generation might violate our policies. Please try a different prompt or send feedback.",
-    }));
     session.last_render_batch = {
       prompt_ids: activePromptIds,
       aspect_ratio: aspectRatio,
@@ -513,13 +606,13 @@ async function main(): Promise<void> {
       batchToUpdate.rendered_media = session.last_render_batch.rendered_media;
       batchToUpdate.failed_prompts = failedPrompts;
       batchToUpdate.captured_at = session.last_render_batch.captured_at;
-      batchToUpdate.status = failedPromptIds.length ? "partial_failure" : "rendered_ready";
+      batchToUpdate.status = failedPrompts.length ? "partial_failure" : "rendered_ready";
       batchToUpdate.retry_count = retryFailed ? 1 : 0;
     }
     writeJson(SESSION_STATE_PATH, session);
 
-    if (failedPromptIds.length) {
-      appendLog(`Prompt-violation outcomes detected for prompt ids ${failedPromptIds.join(", ")} at ${aspectRatio}. Successful siblings remain valid for immediate download.`);
+    if (failedPrompts.length) {
+      appendLog(`Failed outcomes detected for prompt ids ${failedPrompts.map((item) => `${item.prompt_id}:${item.reason}`).join(", ")} at ${aspectRatio}. Successful siblings remain valid for immediate download.`);
     }
     appendLog(`Rendered ${newImages.length} image(s) for prompt ids ${activePromptIds.join(", ")} at ${aspectRatio}. Media: ${newImages.map((item) => item.mediaName).join(", ")}.`);
   } finally {

@@ -77,6 +77,8 @@ Session cap rule:
 - one session may create at most 64 images total
 - that means 32 wide (`16:9`) and 32 square (`1:1`)
 - because each trend needs 8 images, one session may queue at most 8 trends
+- if there are fewer than 8 strong ranked trends available, continue with additional loop variants of the strongest ranked trends until the 64-image session budget is filled
+- those additional loops must not duplicate the exact same prompt text; they must be explicit loop variants with different commercial framing or composition
 - if there are more ranked trends than the current session can handle, mark the extra trends as `deferred_next_session`
 - the next session must start from those deferred trends first, then continue with newer trends
 - this is a per-session cap, not a per-calendar-day cap
@@ -101,6 +103,13 @@ powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps
 ```
 
 Run this only at session start. Do not rebuild `descriptions.json` after image generation has already begun for the active session.
+
+Freshness rule:
+
+```text
+- descriptions.json must only be built from fresh trend_data.json for the current session date
+- restored or older trend research must be rejected instead of being silently reused for a new session
+```
 
 Before risky model/provider experiments, create a local-state backup first:
 
@@ -253,10 +262,17 @@ For each ranked trend:
 4. Prefer `2K` download
 5. If the same image fails `2K` twice, use `1X` and mark that fallback in sidecar/state
 6. Keep only a 1-second gap between download requests
-7. Ignore every image that existed in the Flow project before this session's current batch
-8. Treat the current run as an active session window: anything visible before the first batch of this run is old and must be ignored; anything rendered after that baseline belongs to this run and is eligible for download
-9. Download order must be bottom-to-top, then right-to-left so the newest renders are handled first
-10. Do not block completed images just because sibling images in the same batch are still rendering or have failed
+7. Never queue more than 4 simultaneous `2K` Flow upscale/download requests at once
+8. Process `2K` downloads in bounded waves of 4 so Flow is not flooded with too many concurrent upscale jobs
+9. If one item inside that 4-image `2K` wave fails or hangs, do not let it block the other ready items in the same wave
+10. If Playwright `saveAs` fails but Chrome already saved the file into the Windows downloads folder, recover that file into `PROJECT_ROOT\downloads\[date]\` instead of re-requesting the same image blindly
+11. Ignore every image that existed in the Flow project before this session's current batch
+12. Treat the current run as an active session window: anything visible before the first batch of this run is old and must be ignored; anything rendered after that baseline belongs to this run and is eligible for download
+13. Download order must be bottom-to-top, then right-to-left so the newest renders are handled first
+14. Do not block completed images just because sibling images in the same batch are still rendering or have failed
+15. If one sibling fails or hangs, successful siblings must still be downloaded immediately
+16. A render that stays unresolved past the runtime waiter limit must be marked as `render_timeout`, then sent into retry or recovery instead of blocking File 02 forever
+17. `run-session` must behave as a single-controller loop. If another `run-session` is already active, do not start a second controller for the same session.
 
 Background file watcher:
 
@@ -275,24 +291,44 @@ Background file watcher:
 Full-system rolling command surface:
 
 ```text
+Run full File 02 session loop:
+npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=run-session
+
 Submit batch:          npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=submit-batch --prompt-ids=... --aspect=16:9|1:1
 Rolling downloader:    npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download
 Legacy alias:          npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-nonblocking
 Recovery sweep only:   npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=download-recovery
 Retry failed prompts:  npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=retry-failed
 Recover UI failures:   npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=recover-failures
+Reconcile drifted downloads: npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=reconcile-downloads
 ```
 
 Rule:
 
+- `run-session` is the preferred public controller for File 02
+- `run-session` must own the rolling loop itself: submit, capture renders, download, retry, recover, continue
+- `run-session` must enforce a single active controller lock so duplicate agents cannot submit the same prompt range twice
+- if a damaged session leaves only some prompt slots missing from an older 4-prompt group, `run-session` may submit that partial recovery subset instead of crashing on a not-full batch
+- `run-session` must stop only when:
+  - the session image cap is reached
+  - there are no more active descriptions for the session
+  - a real runtime error happens
+- if the active prompt inventory exhausts before the session cap and no more fresh ranked trends exist, `run-session` must extend the inventory with loop variants instead of stopping early at 32
+- `run-session` must not stop after a single submit/download pass and call that success
+- use `submit-batch` directly only for targeted/manual intervention, testing, or focused recovery
 - `download` is the default fully parallel downloader for this project
+- the downloader may keep broad rolling behavior, but `2K` requests themselves must be capped at 4 concurrent Flow upscale/download jobs per pass
 - it must click `Download -> 2K` and move on immediately without waiting for the current file to finish before requesting the next ready image
 - use `download-recovery` only as a slower exact recovery sweep
+- if a bad run already downloaded real images without sidecars, repair them before continuing with:
+  `npx --yes tsx PROJECT_ROOT\scripts\flow_runtime.ts --action=repair-sidecars`
 - both download commands must filter against the active session run baseline stored in `session_state.json`; they must not sweep old project renders from earlier sessions
 - submit the next prompt group without waiting for the previous group to fully render
 - if a targeted verification pass is needed for one group, use `submit-batch ... --wait-for-outcomes`
 - if the runtime records failed prompts for a group, use `retry-failed` immediately instead of leaving the batch incomplete
 - if Flow shows visible failed tiles or exception states that were not already captured into runtime batch state, use `recover-failures` before trying to repair them manually
+- visible failed tiles, generic failed renders, and long-running unresolved renders are all recoverable File 02 failures; none of them should freeze the rolling loop
+- `run-session` must classify timed-out unresolved renders as failure state, then retry or recover them while already successful siblings continue through download
 - prefer runtime recovery commands over ad hoc UI improvisation whenever the same exception can be scripted
 
 Failure JSON trigger:

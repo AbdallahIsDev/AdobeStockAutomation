@@ -7,7 +7,7 @@ import {
   SESSION_STATE_PATH,
   TREND_DATA_PATH,
 } from "../project_paths";
-import { jsonTimestamp } from "../common/time";
+import { dateFolderName, jsonTimestamp } from "../common/time";
 import { appendAutomationLog } from "../common/logging";
 
 type Trend = {
@@ -30,6 +30,7 @@ type Description = {
   id: number;
   trend_id: number;
   trend_topic: string;
+  loop_index?: number;
   series_slot: string;
   aspect_ratio: "16:9" | "1:1";
   quantity: 1;
@@ -109,6 +110,20 @@ const SLOT_PURPOSE: Record<string, string> = {
   "1C_closeup": "top-down or flat-lay square composition",
   "1D_isolated": "square alternate demographic or culture-forward variation",
 };
+
+const LOOP_VARIATION_WIDE = [
+  "premium enterprise stock-photo treatment",
+  "alternate buyer-facing campaign variation",
+  "secondary commercial narrative variation",
+  "clean executive presentation variant",
+] as const;
+
+const LOOP_VARIATION_SQUARE = [
+  "premium social crop treatment",
+  "alternate thumbnail-safe campaign variation",
+  "secondary app-store-style marketing variation",
+  "clean commerce-friendly square variant",
+] as const;
 
 function readJson<T>(filePath: string, fallback: T): T {
   try {
@@ -206,16 +221,27 @@ function bestTags(trend: CarryForwardTrend): string[] {
   ]).slice(0, 6);
 }
 
-function buildPrompt(trend: CarryForwardTrend, seriesSlot: string, promptBatchType: "wide" | "square"): string {
-  const visual = bestVisual(trend, promptBatchType === "wide" ? 0 : 1);
-  const useCase = bestUseCase(trend, promptBatchType === "wide" ? 0 : 1);
+function buildPrompt(
+  trend: CarryForwardTrend,
+  seriesSlot: string,
+  promptBatchType: "wide" | "square",
+  loopIndex: number,
+): string {
+  const visualOffset = promptBatchType === "wide" ? 0 : 1;
+  const cycleOffset = Math.max(0, loopIndex - 1) * 2;
+  const visual = bestVisual(trend, visualOffset + cycleOffset);
+  const useCase = bestUseCase(trend, visualOffset + cycleOffset);
   const summary = trend.summary ?? trend.topic;
   const purpose = SLOT_PURPOSE[seriesSlot] ?? "commercial stock image";
   const orientation = promptBatchType === "wide" ? "photorealistic wide commercial composition" : "photorealistic square commercial composition";
-  return `${purpose} for ${trend.topic}, featuring ${visual}, built for ${useCase}, ${summary}, clean premium stock-photo realism, commercially useful, distinct composition, ${orientation}`;
+  const loopVariation = promptBatchType === "wide"
+    ? LOOP_VARIATION_WIDE[(loopIndex - 1) % LOOP_VARIATION_WIDE.length]
+    : LOOP_VARIATION_SQUARE[(loopIndex - 1) % LOOP_VARIATION_SQUARE.length];
+  const cycleNote = loopIndex > 1 ? `loop ${loopIndex} variation with a clearly different buyer-facing composition` : "primary ranked-trend composition";
+  return `${purpose} for ${trend.topic}, featuring ${visual}, built for ${useCase}, ${summary}, ${cycleNote}, ${loopVariation}, clean premium stock-photo realism, commercially useful, distinct composition, ${orientation}`;
 }
 
-function buildDescriptionsForTrend(trend: CarryForwardTrend, startId: number, deferred: boolean): Description[] {
+function buildDescriptionsForTrend(trend: CarryForwardTrend, startId: number, deferred: boolean, loopIndex: number): Description[] {
   const descriptions: Description[] = [];
   let id = startId;
   for (const seriesSlot of SERIES_STRUCTURE["16:9"]) {
@@ -223,10 +249,11 @@ function buildDescriptionsForTrend(trend: CarryForwardTrend, startId: number, de
       id,
       trend_id: trend.id,
       trend_topic: trend.topic,
+      loop_index: loopIndex,
       series_slot: seriesSlot,
       aspect_ratio: "16:9",
       quantity: 1,
-      prompt_text: buildPrompt(trend, seriesSlot, "wide"),
+      prompt_text: buildPrompt(trend, seriesSlot, "wide", loopIndex),
       commercial_tags: bestTags(trend),
       status: deferred ? "deferred_next_session" : "ready",
       prompt_batch: 1,
@@ -240,10 +267,11 @@ function buildDescriptionsForTrend(trend: CarryForwardTrend, startId: number, de
       id,
       trend_id: trend.id,
       trend_topic: trend.topic,
+      loop_index: loopIndex,
       series_slot: seriesSlot,
       aspect_ratio: "1:1",
       quantity: 1,
-      prompt_text: buildPrompt(trend, seriesSlot, "square"),
+      prompt_text: buildPrompt(trend, seriesSlot, "square", loopIndex),
       commercial_tags: bestTags(trend),
       status: deferred ? "deferred_next_session" : "ready",
       prompt_batch: 2,
@@ -253,6 +281,43 @@ function buildDescriptionsForTrend(trend: CarryForwardTrend, startId: number, de
     id += 1;
   }
   return descriptions;
+}
+
+function expandTrendQueueToSessionSlots(trends: CarryForwardTrend[], desiredSlots: number): CarryForwardTrend[] {
+  if (!trends.length || desiredSlots <= 0) {
+    return [];
+  }
+
+  const expanded: CarryForwardTrend[] = [];
+  let index = 0;
+  while (expanded.length < desiredSlots) {
+    expanded.push(trends[index % trends.length]);
+    index += 1;
+  }
+  return expanded;
+}
+
+function assertFreshTrendData(trendData: TrendDataFile, session: SessionState): void {
+  const expectedSessionDate = String(session.session_date ?? dateFolderName()).trim();
+  const trendSessionDate = String(trendData.session_date ?? "").trim();
+
+  if (!trendSessionDate) {
+    throw new Error(
+      `Refusing to build descriptions because trend_data.json does not declare session_date. Expected fresh File 01 output for ${expectedSessionDate}.`,
+    );
+  }
+
+  if (trendSessionDate !== expectedSessionDate) {
+    throw new Error(
+      `Refusing to build descriptions from stale trend_data.json. trend_session_date=${trendSessionDate}, expected_session_date=${expectedSessionDate}. Run fresh File 01 research first.`,
+    );
+  }
+
+  if (!(trendData.trends ?? []).length) {
+    throw new Error(
+      `Refusing to build descriptions because trend_data.json contains no ranked trends for session ${expectedSessionDate}.`,
+    );
+  }
 }
 
 function main(): void {
@@ -275,6 +340,8 @@ function main(): void {
     );
   }
 
+  assertFreshTrendData(trendData, session);
+
   const currentSessionImageCap = session.session_image_cap ?? SESSION_IMAGE_CAP;
   const currentSessionAspectCap = session.session_aspect_cap ?? SESSION_ASPECT_CAP;
   const currentSessionTrendCap = session.session_trend_cap ?? SESSION_TREND_CAP;
@@ -293,8 +360,8 @@ function main(): void {
 
   const trendQueue = mergeTrendQueue(existingDescriptions.carry_forward_trends ?? [], trendData.trends ?? [])
     .filter((trend) => !completedTopics.has(normalizeTopicKey(trend.topic)));
-  const queuedToday = trendQueue.slice(0, remainingTrendCapacity);
-  const carryForward = trendQueue.slice(remainingTrendCapacity).map((trend) => ({
+  const queuedToday = expandTrendQueueToSessionSlots(trendQueue, remainingTrendCapacity);
+  const carryForward = trendQueue.slice(Math.min(trendQueue.length, remainingTrendCapacity)).map((trend) => ({
     ...trend,
     carried_forward_at: jsonTimestamp(),
     source: trend.source ?? "carry_forward",
@@ -302,13 +369,15 @@ function main(): void {
 
   let nextId = 1;
   const descriptions: Description[] = [];
-  for (const trend of queuedToday) {
-    const built = buildDescriptionsForTrend(trend, nextId, false);
+  for (let queueIndex = 0; queueIndex < queuedToday.length; queueIndex += 1) {
+    const trend = queuedToday[queueIndex];
+    const loopIndex = Math.floor(queueIndex / Math.max(1, trendQueue.length)) + 1;
+    const built = buildDescriptionsForTrend(trend, nextId, false, loopIndex);
     descriptions.push(...built);
     nextId += built.length;
   }
   for (const trend of carryForward) {
-    const built = buildDescriptionsForTrend(trend, nextId, true);
+    const built = buildDescriptionsForTrend(trend, nextId, true, 1);
     descriptions.push(...built);
     nextId += built.length;
   }
@@ -321,7 +390,7 @@ function main(): void {
     session_image_cap: currentSessionImageCap,
     session_aspect_cap: currentSessionAspectCap,
     session_trend_cap: currentSessionTrendCap,
-    loop_index: typeof existingDescriptions.loop_index === "number" ? existingDescriptions.loop_index + 1 : 1,
+    loop_index: queuedToday.length > 0 ? Math.ceil(queuedToday.length / Math.max(1, trendQueue.length || 1)) : 0,
     descriptions_per_trend: DESCRIPTIONS_PER_TREND,
     series_structure: SERIES_STRUCTURE as unknown as Record<string, string[]>,
     carry_forward_trends: carryForward,
@@ -346,7 +415,7 @@ function main(): void {
   writeJson(SESSION_STATE_PATH, session);
 
   appendLog(
-    `Description inventory built dynamically. session_trends=${queuedToday.length}, session_prompts=${output.session_active_descriptions}, carry_forward=${carryForward.length}, total_prompts=${descriptions.length}.`,
+    `Description inventory built dynamically. ranked_trends=${trendQueue.length}, session_trend_slots=${queuedToday.length}, loop_depth=${output.loop_index}, session_prompts=${output.session_active_descriptions}, carry_forward=${carryForward.length}, total_prompts=${descriptions.length}.`,
   );
 }
 
