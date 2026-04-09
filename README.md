@@ -86,12 +86,11 @@ PROJECT_ROOT\
 │       ├── reconcile_data_and_sidecars.ts
 │       └── run_pipeline.ts
 │   └── adobe\                          ← Internal Adobe helpers
-│       ├── adobe_stock_uia.ps1
-│       ├── apply_metadata.ts
-│       ├── process_adobe_page.ps1
-│       ├── probe_uploads.ts
-│       ├── repair_sidecars.ts
-│       └── selector_cache.ts
+│       ├── adobe_selectors.ts          ← Selector cache + discovery for Adobe Stock
+│       ├── adobe_skill.ts              ← Browser automation: connect, metadata, probe, submit
+│       ├── apply_metadata.ts           ← Batch metadata apply/check across pages
+│       ├── probe_uploads.ts            ← Upload queue inspection
+│       └── repair_sidecars.ts          ← Sidecar file repair and normalization
 │
 ├── downloads\                          ← Source images and final prepared outputs
 │   ├── [YYYY-MM-DD]\                   ← AI-generated images only
@@ -247,6 +246,8 @@ If ExifTool is installed outside PATH, set `data\upscaler_state.json -> exiftool
 - File 04 has a real check phase: it audits the current Adobe fields first, then writes only the fields that are weak or mismatched.
 - `npx --yes tsx scripts/adobe_runtime.ts --action=check --date=YYYY-MM-DD` runs a non-destructive Adobe audit pass.
 - `npx --yes tsx scripts/adobe_runtime.ts --action=apply --date=YYYY-MM-DD` runs the normal check-then-update pass.
+- Windows alternative (thin wrapper): `powershell -ExecutionPolicy Bypass -File scripts\session_runtime.ps1 -Action stage -Stage metadata_optimizer`
+- Note: `adobe_stock_uia.ps1` and `process_adobe_page.ps1` have been removed. Browser automation is now handled by `scripts/adobe/adobe_skill.ts` using Playwright + Stagehand via browser-automation-core.
 - Machine-readable JSON reports belong in `data\reports\`, not in `logs\`.
 - `logs\automation.log` uses severity tags like `[ERROR]`, `[WARN]`, and `[SUCCESS]` instead of embedded color codes, because plain text colors are not reliable across editors.
 - `logs\automation.log` automatically prunes lines older than 3 days whenever active runtime scripts append new entries.

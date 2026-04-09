@@ -49,7 +49,7 @@ function sortByDownloadedAt(a: DownloadedImage, b: DownloadedImage): number {
 function main(): void {
   const session = readJson<SessionState>(SESSION_STATE_PATH, {});
   const downloadedImages = (Array.isArray(session.downloaded_images) ? session.downloaded_images : [])
-    .map((item) => ({ ...item, prompt_id: null }));
+    .map((item): DownloadedImage => ({ ...item, prompt_id: null }));
   const workingSession: SessionState = {
     ...session,
     downloaded_images: [],

@@ -1,4 +1,4 @@
-import { connectBrowser, findPageByUrl, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, findPageByUrl, getOrOpenPage, isDebugPortReady } from "@bac/browser_core";
 
 async function main(): Promise<void> {
   const shouldOpenSettings = process.argv.includes("--open-settings");
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
 
     console.log(JSON.stringify(snapshot, null, 2));
   } finally {
-    await browser.close();
+    void browser;
   }
 }
 
