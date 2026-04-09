@@ -231,6 +231,10 @@ For full-system runs, the orchestrator should think in this exact pattern:
 
 4. Spawn Metadata Optimizer Agent
    Assigned file: instructions\04_METADATA_OPTIMIZER.md
+   Primary runtime commands:
+     npx --yes tsx PROJECT_ROOT\scripts\adobe_runtime.ts --action=check --date=YYYY-MM-DD
+     npx --yes tsx PROJECT_ROOT\scripts\adobe_runtime.ts --action=apply --date=YYYY-MM-DD
+   Windows alternative: powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage metadata_optimizer
    Internal workflow: Planner -> Generator -> Evaluator
    Completion check: Adobe Stock items have their Adobe-only finish fields applied, any weak prefilled metadata is corrected, and the action is logged
 ```
