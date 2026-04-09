@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Page } from "playwright";
-import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, getOrOpenPage, isDebugPortReady } from "@bac/browser_core";
 import { AUTOMATION_LOG_PATH, DATA_DIR, SESSION_STATE_PATH } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
 import { appendAutomationLog } from "../common/logging";
@@ -127,14 +127,16 @@ async function main(): Promise<void> {
     }
 
     const retryClicked = await clickSmallButtons(page, "retry");
-    await page.waitForTimeout(2000);
+    // Wait for retry actions to take effect; no deterministic DOM indicator for async render retries
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     const afterRetry = await scanFailures(page);
 
     let reuseClicked = 0;
     let afterReuse = afterRetry;
     if (afterRetry.failedTileCount > 0) {
       reuseClicked = await clickSmallButtons(page, "reuse");
-      await page.waitForTimeout(2500);
+      // Wait for reuse prompt actions to take effect; no deterministic DOM indicator available
+      await new Promise((resolve) => setTimeout(resolve, 2500));
       afterReuse = await scanFailures(page);
     }
 
@@ -152,7 +154,7 @@ async function main(): Promise<void> {
       `Flow recovery handled visible failures. Before=${before.failedTileCount}, retry_clicked=${retryClicked}, after_retry=${afterRetry.failedTileCount}, reuse_clicked=${reuseClicked}, after_reuse=${afterReuse.failedTileCount}.`,
     );
   } finally {
-    await browser.close();
+    void browser;
   }
 }
 

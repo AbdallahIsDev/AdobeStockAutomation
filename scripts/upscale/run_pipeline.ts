@@ -805,4 +805,9 @@ async function main(): Promise<void> {
   }
 }
 
+export async function runFifoPipeline(imagePath: string): Promise<void> {
+  process.argv = [...process.argv, "--mode=fifo", `--image=${imagePath}`];
+  await main();
+}
+
 void main();

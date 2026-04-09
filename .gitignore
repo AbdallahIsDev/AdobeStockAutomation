@@ -27,3 +27,6 @@ staging/x4/*
 node_modules/
 dist/
 coverage/
+
+# Environment variables
+.env

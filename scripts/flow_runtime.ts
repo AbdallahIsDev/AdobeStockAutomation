@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 function readAction(): string {
   const actionArg = process.argv.find((arg) => arg.startsWith("--action="));
   return actionArg?.split("=", 2)[1]?.trim().toLowerCase() ?? "";

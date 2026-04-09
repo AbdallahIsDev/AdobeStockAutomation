@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import type { Download, Page } from "playwright";
 import {
   connectBrowser,
@@ -8,7 +7,7 @@ import {
   isDebugPortReady,
   screenshotElement,
   waitForElement,
-} from "../../../../../browser-automation-core/browser_core";
+} from "@bac/browser_core";
 import { quarantineFailedAsset } from "../common/failed_assets";
 import { buildAiMetadataContext } from "../common/ai_metadata";
 import { appendAutomationLog } from "../common/logging";
@@ -124,7 +123,6 @@ type DownloadAttemptResult =
 const ROOT = process.cwd();
 const SELECTORS_REGISTRY_PATH = path.join(DATA_DIR, "selectors_registry.json");
 const BROWSER_PROBE_PATH = path.join(DATA_DIR, "browser_probe.json");
-const UPSCALE_RUNTIME_PATH = path.join(ROOT, "scripts", "upscale_runtime.ps1");
 const CDP_PORT = 9222;
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
 
@@ -202,6 +200,7 @@ function writeFailureRecord(
   });
 }
 
+// sleep used for polling intervals and retry backoffs where no DOM condition is available.
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -381,6 +380,7 @@ function buildDeterministicStem(
 async function openDownloadSubmenu(page: Page, mediaName: string): Promise<{ ok: boolean; error?: string; options?: string[] }> {
   return page.evaluate(async (targetMediaName) => {
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    // Short debounce to allow UI state reset before locating target image
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const images = Array.from(document.querySelectorAll("img[alt=\"Generated image\"]"));
@@ -409,6 +409,7 @@ async function openDownloadSubmenu(page: Page, mediaName: string): Promise<{ ok:
       clientY: rect.top + rect.height / 2,
     }));
 
+    // Wait for context menu to appear after right-click (no DOM event to detect menu open)
     await new Promise((resolve) => setTimeout(resolve, 250));
 
     const downloadItem = Array.from(document.querySelectorAll("[role=\"menuitem\"]"))
@@ -424,6 +425,7 @@ async function openDownloadSubmenu(page: Page, mediaName: string): Promise<{ ok:
       view: window,
     }));
 
+    // Wait for download submenu to open after clicking Download menu item
     await new Promise((resolve) => setTimeout(resolve, 250));
 
     const options = Array.from(document.querySelectorAll("[role=\"menuitem\"]"))
@@ -561,24 +563,7 @@ function markDownloaded(session: SessionState, image: GeneratedImage, result: Ex
   session.downloaded_images = downloaded;
   session.images_downloaded_count = downloaded.length;
   if (session.post_download_policy === "fifo_upscale_prepare") {
-    spawn(
-      "powershell",
-      [
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        UPSCALE_RUNTIME_PATH,
-        "-Action",
-        "fifo",
-        "-ImagePath",
-        result.savedPath,
-      ],
-      {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      },
-    ).unref();
+    import("../upscale/run_pipeline").then(m => m.runFifoPipeline(result.savedPath)).catch(err => console.error(err));
     appendLog(`${timestampIso()} Queued FIFO prepare for ${image.mediaName} -> ${result.savedPath}.`);
   }
 }
@@ -792,7 +777,7 @@ async function main(): Promise<void> {
     ? "downloads_partial_failure"
     : "downloads_completed";
   browserProbe.page_url = page.url();
-  browserProbe.project_id = session.current_project_id ?? null;
+  browserProbe.project_id = session.current_project_id ?? undefined;
   browserProbe.evidence = [
     ...(browserProbe.evidence ?? []),
     `Downloaded ${results.filter((item) => item.mode === "2K" || item.mode === "1X").length} pending Flow image(s) from project ${session.current_project_id ?? "unknown"}.`,
