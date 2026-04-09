@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, getOrOpenPage, isDebugPortReady } from "@bac/browser_core";
 import { AUTOMATION_LOG_PATH, SESSION_STATE_PATH } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
 
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
     let visibleFailureCount = 0;
 
     while (Date.now() < deadline) {
-      const rendered = await page.evaluate((selector) => {
+      const rendered = await page.evaluate((selector: string) => {
         return Array.from(document.querySelectorAll(selector)).map((img) => {
           const src = img.getAttribute("src") || "";
           let mediaName = "";
@@ -140,6 +140,8 @@ async function main(): Promise<void> {
       if (fresh.length + Math.max(policyFailureCount, visibleFailureCount) >= expected) {
         break;
       }
+      // Polling interval: no deterministic DOM condition for render completion.
+      // Each iteration re-checks for new generated images vs. known set.
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
@@ -208,7 +210,7 @@ async function main(): Promise<void> {
       appendLog(`Waiter also classified ${failedPromptIds.length} failed render(s) for aspect ${aspect}: ${failedPrompts.map((item) => `${item.prompt_id}:${item.reason}`).join(", ")}.`);
     }
   } finally {
-    await browser.close();
+    void browser;
   }
 }
 

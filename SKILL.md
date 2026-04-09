@@ -116,7 +116,15 @@ Spawn the next stage only after the current stage has signaled success and that 
    Verify before continuing: upscaled images exist in downloads\upscaled\[date]\, matching sidecars exist in downloads\upscaled\[date]\metadata\, and XMP embed status is recorded for each final image before Adobe upload.
 
 4. Metadata Optimizer
+   Primary (direct, works on any OS):
+     npx --yes tsx PROJECT_ROOT\scripts\adobe_runtime.ts --action=check --date=YYYY-MM-DD
+     npx --yes tsx PROJECT_ROOT\scripts\adobe_runtime.ts --action=apply --date=YYYY-MM-DD
+   Windows alternative (thin wrapper):
+     powershell -ExecutionPolicy Bypass -File PROJECT_ROOT\scripts\session_runtime.ps1 -Action stage -Stage metadata_optimizer
    File: instructions\04_METADATA_OPTIMIZER.md
+   Note: adobe_stock_uia.ps1 and process_adobe_page.ps1 have been removed.
+   Browser automation is now handled by scripts/adobe/adobe_skill.ts
+   using Playwright + Stagehand via browser-automation-core.
    Verify completion: Adobe Stock items show XMP-prefilled title/keywords, Adobe-only finish fields are applied, and the action is logged.
 ```
 

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Page } from "playwright";
-import { connectBrowser, getOrOpenPage, isDebugPortReady, waitForElement } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, getOrOpenPage, isDebugPortReady, waitForElement } from "@bac/browser_core";
 import { AUTOMATION_LOG_PATH, DESCRIPTIONS_PATH, SESSION_STATE_PATH } from "../project_paths";
 import { jsonTimestamp } from "../common/time";
 import { appendAutomationLog } from "../common/logging";
@@ -113,6 +113,7 @@ function normalize(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
+// sleep used for polling intervals where no deterministic DOM condition exists.
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -616,7 +617,7 @@ async function main(): Promise<void> {
     }
     appendLog(`Rendered ${newImages.length} image(s) for prompt ids ${activePromptIds.join(", ")} at ${aspectRatio}. Media: ${newImages.map((item) => item.mediaName).join(", ")}.`);
   } finally {
-    await browser.close();
+    void browser;
   }
 }
 

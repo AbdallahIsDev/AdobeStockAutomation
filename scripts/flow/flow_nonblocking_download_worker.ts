@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import type { Download, Page } from "playwright";
-import { connectBrowser, getOrOpenPage, isDebugPortReady } from "../../../../../browser-automation-core/browser_core";
+import { connectBrowser, getOrOpenPage, isDebugPortReady } from "@bac/browser_core";
 import { AUTOMATION_LOG_PATH, DATA_DIR, DESCRIPTIONS_PATH, DOWNLOADS_DIR, SESSION_STATE_PATH } from "../project_paths";
 import { buildAiMetadataContext } from "../common/ai_metadata";
 import { resolvePromptIdForDownload } from "../common/prompt_resolution";
@@ -98,7 +97,6 @@ type SavedDownload = {
 
 const ROOT = process.cwd();
 const BROWSER_PROBE_PATH = path.join(DATA_DIR, "browser_probe.json");
-const UPSCALE_RUNTIME_PATH = path.join(ROOT, "scripts", "upscale_runtime.ps1");
 const GENERATED_IMAGE_SELECTOR = "img[alt=\"Generated image\"]";
 const CDP_PORT = 9222;
 const BETWEEN_REQUESTS_MS = 150;
@@ -250,6 +248,7 @@ function chunkImages(images: GeneratedImage[], size: number): GeneratedImage[][]
   return chunks;
 }
 
+// sleep used for polling intervals where no deterministic DOM condition exists.
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -377,6 +376,7 @@ function getSessionRunBaseline(session: SessionState): Set<string> {
 async function openDownloadSubmenu(page: Page, mediaName: string): Promise<boolean> {
   return page.evaluate(async (targetMediaName) => {
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    // Short debounce to allow UI state reset before locating target image
     await new Promise((resolve) => setTimeout(resolve, 40));
     const images = Array.from(document.querySelectorAll("img[alt=\"Generated image\"]"));
     const target = images.find((img) => {
@@ -397,8 +397,9 @@ async function openDownloadSubmenu(page: Page, mediaName: string): Promise<boole
       button: 2,
       buttons: 2,
       clientX: rect.left + rect.width / 2,
-      clientY: rect.top + rect.height / 2,
     }));
+
+    // Wait for context menu to appear after right-click
     await new Promise((resolve) => setTimeout(resolve, 120));
     const downloadItem = Array.from(document.querySelectorAll("[role=\"menuitem\"]"))
       .find((el) => (el.textContent || "").includes("Download")) as HTMLElement | undefined;
@@ -408,6 +409,8 @@ async function openDownloadSubmenu(page: Page, mediaName: string): Promise<boole
       cancelable: true,
       view: window,
     }));
+
+    // Wait for download submenu to open
     await new Promise((resolve) => setTimeout(resolve, 100));
     return true;
   }, mediaName);
@@ -455,24 +458,7 @@ function shouldQueueFifoPrepare(session: SessionState): boolean {
 }
 
 function queueFifoPrepare(savedPath: string): void {
-  spawn(
-    "powershell",
-    [
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      UPSCALE_RUNTIME_PATH,
-      "-Action",
-      "fifo",
-      "-ImagePath",
-      savedPath,
-    ],
-    {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    },
-  ).unref();
+  import("../upscale/run_pipeline").then(m => m.runFifoPipeline(savedPath)).catch(err => console.error(err));
 }
 
 function removeImageAndSidecar(filePath: string | null | undefined): void {
